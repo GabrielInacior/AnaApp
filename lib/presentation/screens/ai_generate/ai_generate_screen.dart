@@ -287,13 +287,15 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                 ),
               ),
             ] else ...[
-              _buildTopicSection(theme, colorScheme, isDark),
+              _buildSourceSection(theme, colorScheme, isDark),
               const SizedBox(height: 20),
+              if (_sourceMode == _SourceMode.topic)
+                _buildTopicSection(theme, colorScheme, isDark),
+              if (_sourceMode == _SourceMode.topic)
+                const SizedBox(height: 20),
               _buildQuantitySection(theme, colorScheme, isDark),
               const SizedBox(height: 20),
               _buildImageToggle(theme, colorScheme, isDark),
-              const SizedBox(height: 20),
-              _buildSourceSection(theme, colorScheme, isDark),
               const SizedBox(height: 24),
               _buildGenerateButton(theme, colorScheme, aiState, notifier),
               const SizedBox(height: 12),
