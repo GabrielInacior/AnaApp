@@ -295,22 +295,26 @@ class _PdfTab extends StatelessWidget {
         children: [
           Text('Modo de leitura do PDF:',
               style: theme.textTheme.labelLarge),
-          RadioListTile<PdfParseMode>(
-            value: PdfParseMode.lineByLine,
+          RadioGroup<PdfParseMode>(
             groupValue: parseMode,
             onChanged: (v) => onModeChanged(v!),
-            title: const Text('Linha a linha'),
-            subtitle: const Text(
-                'Linha ímpar = inglês, linha par = tradução\n(ideal para materiais do seu curso)'),
-            contentPadding: EdgeInsets.zero,
-          ),
-          RadioListTile<PdfParseMode>(
-            value: PdfParseMode.aiInterpreted,
-            groupValue: parseMode,
-            onChanged: (v) => onModeChanged(v!),
-            title: const Text('IA interpreta'),
-            subtitle: const Text('A IA analisa o texto e cria os cards'),
-            contentPadding: EdgeInsets.zero,
+            child: const Column(
+              children: [
+                RadioListTile<PdfParseMode>(
+                  value: PdfParseMode.lineByLine,
+                  title: Text('Linha a linha'),
+                  subtitle: Text(
+                      'Linha ímpar = inglês, linha par = tradução\n(ideal para materiais do seu curso)'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                RadioListTile<PdfParseMode>(
+                  value: PdfParseMode.aiInterpreted,
+                  title: Text('IA interpreta'),
+                  subtitle: Text('A IA analisa o texto e cria os cards'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
           ),
           const Divider(),
           const SizedBox(height: 8),

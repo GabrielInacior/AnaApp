@@ -1,7 +1,6 @@
 // lib/presentation/screens/settings/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/repository_providers.dart';

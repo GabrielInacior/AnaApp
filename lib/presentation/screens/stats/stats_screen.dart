@@ -99,7 +99,7 @@ class StatsScreen extends ConsumerWidget {
                       }).toList(),
                       titlesData: FlTitlesData(
                         show: true,
-                        bottomTitles: AxisTitles(
+                        bottomTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false),
                         ),
                         leftTitles: AxisTitles(
@@ -112,9 +112,9 @@ class StatsScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        rightTitles: AxisTitles(
+                        rightTitles: const AxisTitles(
                             sideTitles: SideTitles(showTitles: false)),
-                        topTitles: AxisTitles(
+                        topTitles: const AxisTitles(
                             sideTitles: SideTitles(showTitles: false)),
                       ),
                       gridData: const FlGridData(show: false),
