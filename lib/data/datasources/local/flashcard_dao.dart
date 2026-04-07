@@ -85,6 +85,20 @@ class FlashcardDAO {
         where: 'id = ?', whereArgs: [card.id]);
   }
 
+  /// Update only the image path + clear pending flag, preserving all other fields
+  Future<void> updateImagePath(String cardId, {String? frontImagePath}) async {
+    final db = await _helper.database;
+    await db.update(
+      'flashcards',
+      {
+        'front_image_path': frontImagePath,
+        'pending_image': 0,
+      },
+      where: 'id = ?',
+      whereArgs: [cardId],
+    );
+  }
+
   Future<void> delete(String id) async {
     final db = await _helper.database;
     await db.delete('flashcards', where: 'id = ?', whereArgs: [id]);

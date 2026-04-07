@@ -160,7 +160,7 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
     if (apiKey == null || apiKey.isEmpty) return;
 
     final openAIClient = _ref.read(openAIClientProvider);
-    final cardRepo = _ref.read(flashcardRepositoryProvider);
+    final flashcardDao = _ref.read(flashcardDaoProvider);
 
     final pendingIds = cards.map((c) => c.id).toSet();
 
@@ -182,10 +182,14 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
         final imageBytes =
             await openAIClient.generateImage(apiKey: apiKey, prompt: prompt);
         final path = await ImageHelper.saveImage(imageBytes);
-        final updated = cards[i].copyWith(frontImagePath: path);
-        await cardRepo.updateCard(updated);
+        // Targeted update: only set image path + clear pending flag
+        // Does NOT overwrite review progress (dueDate, interval, queue, etc.)
+        await flashcardDao.updateImagePath(cards[i].id, frontImagePath: path);
       } catch (_) {
-        // Skip failed images silently
+        // Image failed — clear pending flag only
+        try {
+          await flashcardDao.updateImagePath(cards[i].id);
+        } catch (_) {}
       }
 
       if (!mounted) return;
