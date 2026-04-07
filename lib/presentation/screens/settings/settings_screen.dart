@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../providers/deck_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -185,6 +186,60 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ],
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Dados
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Dados', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.upload_rounded),
+                    title: const Text('Exportar backup'),
+                    subtitle: const Text('Salva todos os baralhos e cards'),
+                    onTap: () async {
+                      try {
+                        await ref.read(exportImportProvider).exportAll();
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Erro ao exportar: $e')));
+                        }
+                      }
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.download_rounded),
+                    title: const Text('Importar backup'),
+                    subtitle: const Text('Restaura baralhos de um arquivo .anaapp.json'),
+                    onTap: () async {
+                      try {
+                        final count = await ref.read(exportImportProvider).importFromFile();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('$count cards importados!')));
+                          ref.invalidate(deckProvider);
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Erro ao importar: $e')));
+                        }
+                      }
+                    },
                   ),
                 ],
               ),

@@ -24,6 +24,7 @@ import '../../domain/usecases/flashcard/delete_card.dart';
 import '../../domain/usecases/flashcard/get_due_cards.dart';
 import '../../domain/usecases/review/get_stats.dart';
 import '../../domain/usecases/review/submit_review.dart';
+import '../../domain/usecases/export_import.dart';
 
 // Infrastructure
 final dbHelperProvider = Provider<DatabaseHelper>((_) => DatabaseHelper.instance);
@@ -92,3 +93,8 @@ final generateCardsUseCaseProvider =
           cardRepository: ref.read(flashcardRepositoryProvider),
           secureStorage: ref.read(secureStorageProvider),
         ));
+
+final exportImportProvider = Provider<ExportImport>((ref) => ExportImport(
+      deckRepo: ref.read(deckRepositoryProvider),
+      cardRepo: ref.read(flashcardRepositoryProvider),
+    ));
