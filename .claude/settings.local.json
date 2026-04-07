@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Project/**)",
+      "Bash(flutter create:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter:*)",
+      "Bash(git init:*)",
+      "Bash(git -C /c/Project/AnaApp add pubspec.yaml pubspec.lock lib/main.dart)",
+      "Bash(git -C /c/Project/AnaApp status --short)",
+      "Bash(git -C /c/Project/AnaApp add -A)",
+      "Bash(git -C /c/Project/AnaApp commit -m ':*)"
+    ]
+  }
+}
