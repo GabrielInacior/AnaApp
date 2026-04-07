@@ -19,8 +19,12 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 4,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+      onOpen: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
     );
   }
 
@@ -38,7 +42,10 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        color_value INTEGER,
+        tags TEXT
       )
     ''');
 
@@ -53,6 +60,13 @@ class DatabaseHelper {
         interval_days INTEGER NOT NULL DEFAULT 0,
         repetitions INTEGER NOT NULL DEFAULT 0,
         due_date TEXT NOT NULL,
+        front_image_path TEXT,
+        back_image_path TEXT,
+        queue INTEGER NOT NULL DEFAULT 0,
+        card_type INTEGER NOT NULL DEFAULT 0,
+        lapses INTEGER NOT NULL DEFAULT 0,
+        remaining_steps INTEGER NOT NULL DEFAULT 0,
+        pending_image INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
       )
     ''');
@@ -70,6 +84,73 @@ class DatabaseHelper {
 
     await db.execute('CREATE INDEX idx_cards_deck ON flashcards(deck_id)');
     await db.execute('CREATE INDEX idx_cards_due ON flashcards(due_date)');
+    await db.execute('CREATE INDEX idx_cards_queue ON flashcards(queue)');
+    await db.execute('CREATE INDEX idx_cards_type ON flashcards(card_type)');
     await db.execute('CREATE INDEX idx_logs_date ON review_logs(reviewed_at)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS deck_config (
+        deck_id TEXT PRIMARY KEY,
+        new_cards_per_day INTEGER NOT NULL DEFAULT 20,
+        reviews_per_day INTEGER NOT NULL DEFAULT 200,
+        learning_steps TEXT NOT NULL DEFAULT '1,10',
+        graduating_interval INTEGER NOT NULL DEFAULT 1,
+        easy_interval INTEGER NOT NULL DEFAULT 4,
+        relearning_steps TEXT NOT NULL DEFAULT '10',
+        lapse_threshold INTEGER NOT NULL DEFAULT 8,
+        max_interval INTEGER NOT NULL DEFAULT 36500,
+        FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+          'ALTER TABLE decks ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE decks ADD COLUMN color_value INTEGER');
+    }
+    if (oldVersion < 3) {
+      // Card images
+      await db.execute('ALTER TABLE flashcards ADD COLUMN front_image_path TEXT');
+      await db.execute('ALTER TABLE flashcards ADD COLUMN back_image_path TEXT');
+
+      // Deck tags
+      await db.execute('ALTER TABLE decks ADD COLUMN tags TEXT');
+
+      // SM-2 upgrade: card states
+      await db.execute('ALTER TABLE flashcards ADD COLUMN queue INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE flashcards ADD COLUMN card_type INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE flashcards ADD COLUMN lapses INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE flashcards ADD COLUMN remaining_steps INTEGER NOT NULL DEFAULT 0');
+
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_cards_queue ON flashcards(queue)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_cards_type ON flashcards(card_type)');
+
+      // Deck configuration table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS deck_config (
+          deck_id TEXT PRIMARY KEY,
+          new_cards_per_day INTEGER NOT NULL DEFAULT 20,
+          reviews_per_day INTEGER NOT NULL DEFAULT 200,
+          learning_steps TEXT NOT NULL DEFAULT '1,10',
+          graduating_interval INTEGER NOT NULL DEFAULT 1,
+          easy_interval INTEGER NOT NULL DEFAULT 4,
+          relearning_steps TEXT NOT NULL DEFAULT '10',
+          lapse_threshold INTEGER NOT NULL DEFAULT 8,
+          max_interval INTEGER NOT NULL DEFAULT 36500,
+          FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
+        )
+      ''');
+
+      // Migrate existing reviewed cards to review queue
+      await db.execute('''
+        UPDATE flashcards SET queue = 2, card_type = 2
+        WHERE repetitions > 0 AND interval_days > 0
+      ''');
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE flashcards ADD COLUMN pending_image INTEGER NOT NULL DEFAULT 0');
+    }
   }
 }

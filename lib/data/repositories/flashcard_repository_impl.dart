@@ -35,4 +35,10 @@ class FlashcardRepositoryImpl implements FlashcardRepository {
   @override
   Future<int> countDueCardsByDeck(String deckId, DateTime now) =>
       _dao.countDueByDeck(deckId, now);
+
+  @override
+  Future<Map<String, int>> getMasteryDistribution() => _dao.getMasteryDistribution();
+
+  @override
+  Future<List<MapEntry<DateTime, int>>> getDueForecast(int days) => _dao.getDueForecast(days);
 }

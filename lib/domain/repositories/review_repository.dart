@@ -6,4 +6,6 @@ abstract interface class ReviewRepository {
   Future<List<ReviewLog>> getReviewLogs({DateTime? from, DateTime? to});
   Future<List<ReviewLog>> getReviewLogsByDeck(String deckId);
   Future<int> countReviewsToday();
+  Future<int> getStreakDays();
+  Future<Map<int, int>> getRatingDistribution({DateTime? from, DateTime? to});
 }

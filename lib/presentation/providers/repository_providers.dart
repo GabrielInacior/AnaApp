@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../data/datasources/local/database_helper.dart';
 import '../../data/datasources/local/deck_dao.dart';
+import '../../data/datasources/local/deck_config_dao.dart';
 import '../../data/datasources/local/flashcard_dao.dart';
 import '../../data/datasources/local/review_dao.dart';
 import '../../data/datasources/local/user_dao.dart';
@@ -11,6 +12,7 @@ import '../../data/repositories/deck_repository_impl.dart';
 import '../../data/repositories/flashcard_repository_impl.dart';
 import '../../data/repositories/review_repository_impl.dart';
 import '../../data/repositories/user_repository_impl.dart';
+import '../../domain/entities/deck_config.dart';
 import '../../domain/repositories/deck_repository.dart';
 import '../../domain/repositories/flashcard_repository.dart';
 import '../../domain/repositories/review_repository.dart';
@@ -24,6 +26,7 @@ import '../../domain/usecases/flashcard/delete_card.dart';
 import '../../domain/usecases/flashcard/get_due_cards.dart';
 import '../../domain/usecases/review/get_stats.dart';
 import '../../domain/usecases/review/submit_review.dart';
+import '../../domain/entities/flashcard.dart';
 import '../../domain/usecases/export_import.dart';
 
 // Infrastructure
@@ -41,6 +44,8 @@ final reviewDaoProvider =
     Provider<ReviewDAO>((ref) => ReviewDAO(ref.read(dbHelperProvider)));
 final userDaoProvider =
     Provider<UserDAO>((ref) => UserDAO(ref.read(dbHelperProvider)));
+final deckConfigDaoProvider =
+    Provider<DeckConfigDAO>((ref) => DeckConfigDAO(ref.read(dbHelperProvider)));
 
 // Repositories
 final deckRepositoryProvider = Provider<DeckRepository>((ref) =>
@@ -85,7 +90,7 @@ final submitReviewUseCaseProvider = Provider<SubmitReview>((ref) => SubmitReview
     ));
 
 final getStatsUseCaseProvider =
-    Provider<GetStats>((ref) => GetStats(ref.read(reviewRepositoryProvider)));
+    Provider<GetStats>((ref) => GetStats(ref.read(reviewRepositoryProvider), ref.read(flashcardRepositoryProvider)));
 
 final generateCardsUseCaseProvider =
     Provider<GenerateCardsFromInput>((ref) => GenerateCardsFromInput(
@@ -98,3 +103,15 @@ final exportImportProvider = Provider<ExportImport>((ref) => ExportImport(
       deckRepo: ref.read(deckRepositoryProvider),
       cardRepo: ref.read(flashcardRepositoryProvider),
     ));
+
+// Card list by deck (public, so AI generation provider can invalidate it)
+final cardsByDeckProvider = FutureProvider.autoDispose
+    .family<List<Flashcard>, String>((ref, deckId) {
+  return ref.read(flashcardRepositoryProvider).getCardsByDeck(deckId);
+});
+
+// Deck configuration (for SM-2 scheduling)
+final deckConfigProvider =
+    FutureProvider.family<DeckConfig, String>((ref, deckId) {
+  return ref.read(deckConfigDaoProvider).getConfig(deckId);
+});

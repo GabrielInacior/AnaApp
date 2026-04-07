@@ -20,4 +20,11 @@ class ReviewRepositoryImpl implements ReviewRepository {
 
   @override
   Future<int> countReviewsToday() => _dao.countToday();
+
+  @override
+  Future<int> getStreakDays() => _dao.getStreakDays();
+
+  @override
+  Future<Map<int, int>> getRatingDistribution({DateTime? from, DateTime? to}) =>
+      _dao.getRatingDistribution(from: from, to: to);
 }

@@ -50,61 +50,95 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.school_rounded, size: 64, color: colorScheme.primary),
-                const SizedBox(height: 24),
-                Text(
-                  'Bem-vindo ao\nAnaApp',
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 32),
+                  // Cute icon container
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(32),
+                    ),
+                    child: Icon(
+                      Icons.local_florist_rounded,
+                      size: 48,
+                      color: colorScheme.primary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Flashcards inteligentes para aprender inglês.',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                  const SizedBox(height: 32),
+                  Text(
+                    'Bem-vinda ao',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 48),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Como você quer ser chamado?',
-                    hintText: 'Seu nome',
-                    prefixIcon: Icon(Icons.person_outline),
+                  const SizedBox(height: 4),
+                 Image.asset(
+                    'assets/images/AnaAppLogo.png',
+                    height: 120, // ajusta conforme quiser
                   ),
-                  textCapitalization: TextCapitalization.words,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Por favor, informe seu nome';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _isLoading ? null : _save,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Começar'),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Flashcards inteligentes para aprender ingles',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 48),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Como voce quer ser chamada?',
+                      hintText: 'Seu nome',
+                      prefixIcon: Icon(
+                        Icons.person_rounded,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    textAlign: TextAlign.start,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Por favor, informe seu nome';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: _isLoading ? null : _save,
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Comecar'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

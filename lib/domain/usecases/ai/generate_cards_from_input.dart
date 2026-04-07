@@ -30,6 +30,7 @@ class GenerateCardsFromInput {
     required String deckId,
     required String input,
     required AIInputType inputType,
+    required String topic,
     int maxCards = 20,
   }) async {
     final apiKey = await _secureStorage.read(key: AppConstants.apiKeyStorageKey);
@@ -41,11 +42,11 @@ class GenerateCardsFromInput {
     String prompt;
     switch (inputType) {
       case AIInputType.topic:
-        prompt = 'Gere $maxCards flashcards de inglês sobre o tema: "$input"';
+        prompt = 'Gere $maxCards flashcards sobre: "$input"';
       case AIInputType.text:
       case AIInputType.pdfAI:
         prompt =
-            'Extraia e gere até $maxCards flashcards de inglês a partir deste texto:\n\n$input';
+            'Extraia e gere até $maxCards flashcards a partir deste texto:\n\n$input';
       case AIInputType.pdfLineByLine:
         throw const ParseFailure(
             'pdfLineByLine deve ser processado antes de chamar este use case.');
@@ -54,6 +55,7 @@ class GenerateCardsFromInput {
     final generated = await _aiClient.generateCards(
       apiKey: apiKey,
       prompt: prompt,
+      topic: topic,
       maxCards: maxCards,
     );
 
@@ -66,7 +68,7 @@ class GenerateCardsFromInput {
               back: g.back,
               createdAt: now,
               dueDate: now,
-              easeFactor: SM2.initialEaseFactor,
+              easeFactor: AnkiScheduler.initialEaseFactor,
             ))
         .toList();
 
@@ -88,7 +90,7 @@ class GenerateCardsFromInput {
               back: p.back,
               createdAt: now,
               dueDate: now,
-              easeFactor: SM2.initialEaseFactor,
+              easeFactor: AnkiScheduler.initialEaseFactor,
             ))
         .toList();
     await _cardRepository.addCards(cards);

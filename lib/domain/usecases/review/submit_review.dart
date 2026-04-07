@@ -1,6 +1,7 @@
 // lib/domain/usecases/review/submit_review.dart
 import 'package:uuid/uuid.dart';
 import '../../../core/utils/sm2.dart';
+import '../../entities/deck_config.dart';
 import '../../entities/flashcard.dart';
 import '../../entities/review_log.dart';
 import '../../repositories/flashcard_repository.dart';
@@ -22,20 +23,23 @@ class SubmitReview {
   Future<Flashcard> execute({
     required Flashcard card,
     required CardRating rating,
+    required DeckConfig config,
   }) async {
-    final result = SM2.calculate(
-      easeFactor: card.easeFactor,
-      interval: card.interval,
-      repetitions: card.repetitions,
+    final result = AnkiScheduler.schedule(
+      card: card,
       rating: rating,
+      config: config,
     );
 
-    final nextDue = SM2.nextDueDate(result.interval);
     final updatedCard = card.copyWith(
       easeFactor: result.easeFactor,
       interval: result.interval,
       repetitions: result.repetitions,
-      dueDate: nextDue,
+      dueDate: result.dueDate,
+      queue: result.queue,
+      cardType: result.cardType,
+      lapses: result.lapses,
+      remainingSteps: result.remainingSteps,
     );
 
     await _cardRepository.updateCard(updatedCard);

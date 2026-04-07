@@ -10,7 +10,18 @@
       "Bash(git -C /c/Project/AnaApp add pubspec.yaml pubspec.lock lib/main.dart)",
       "Bash(git -C /c/Project/AnaApp status --short)",
       "Bash(git -C /c/Project/AnaApp add -A)",
-      "Bash(git -C /c/Project/AnaApp commit -m ':*)"
+      "Bash(git -C /c/Project/AnaApp commit -m ':*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(grep:*)",
+      "Read(//tmp/**)",
+      "Bash(python3:*)",
+      "Bash(dart:*)",
+      "Bash(git show:*)",
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(cat /c/Project/AnaApp/lib/presentation/screens/ai_generate/*.dart)"
     ]
   }
 }

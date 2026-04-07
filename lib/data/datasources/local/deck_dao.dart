@@ -9,7 +9,8 @@ class DeckDAO {
 
   Future<List<Deck>> getAll() async {
     final db = await _helper.database;
-    final maps = await db.query('decks', orderBy: 'created_at DESC');
+    final maps = await db.query('decks',
+        orderBy: 'is_favorite DESC, created_at DESC');
     return maps.map((m) => DeckModel.fromMap(m).toEntity()).toList();
   }
 

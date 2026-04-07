@@ -1,6 +1,5 @@
 // lib/presentation/widgets/api_key_info_banner.dart
 import 'package:flutter/material.dart';
-import '../screens/settings/settings_screen.dart';
 
 class ApiKeyInfoBanner extends StatelessWidget {
   const ApiKeyInfoBanner({super.key});
@@ -29,8 +28,14 @@ class ApiKeyInfoBanner extends StatelessWidget {
             ),
           ),
           TextButton(
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            onPressed: () {
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text(
+                        'Acesse a aba Configurações para gerenciar sua chave API.')),
+              );
+            },
             child: const Text('Configurar'),
           ),
         ],

@@ -24,7 +24,13 @@ class DeckRepositoryImpl implements DeckRepository {
   }
 
   @override
-  Future<Deck?> getDeckById(String id) => _deckDAO.getById(id);
+  Future<Deck?> getDeckById(String id) async {
+    final deck = await _deckDAO.getById(id);
+    if (deck == null) return null;
+    final total = await _cardDAO.countByDeck(deck.id);
+    final due = await _cardDAO.countDueByDeck(deck.id, DateTime.now());
+    return deck.copyWith(totalCards: total, dueCards: due);
+  }
 
   @override
   Future<void> createDeck(Deck deck) => _deckDAO.insert(deck);

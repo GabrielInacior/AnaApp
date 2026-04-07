@@ -12,10 +12,18 @@ class DeckNotifier extends AsyncNotifier<List<Deck>> {
     return ref.read(getDecksUseCaseProvider).execute();
   }
 
-  Future<void> createDeck({required String name, String? description}) async {
-    await ref
-        .read(createDeckUseCaseProvider)
-        .execute(name: name, description: description);
+  Future<void> createDeck({
+    required String name,
+    String? description,
+    int? colorValue,
+    List<String>? tags,
+  }) async {
+    await ref.read(createDeckUseCaseProvider).execute(
+          name: name,
+          description: description,
+          colorValue: colorValue,
+          tags: tags,
+        );
     ref.invalidateSelf();
   }
 
@@ -26,6 +34,20 @@ class DeckNotifier extends AsyncNotifier<List<Deck>> {
 
   Future<void> deleteDeck(String id) async {
     await ref.read(deleteDeckUseCaseProvider).execute(id);
+    ref.invalidateSelf();
+  }
+
+  Future<void> toggleFavorite(Deck deck) async {
+    final updated = deck.copyWith(isFavorite: !deck.isFavorite);
+    await ref.read(updateDeckUseCaseProvider).execute(updated);
+    ref.invalidateSelf();
+  }
+
+  Future<void> updateDeckColor(Deck deck, int? colorValue) async {
+    final updated = colorValue == null
+        ? deck.copyWith(clearColor: true)
+        : deck.copyWith(colorValue: colorValue);
+    await ref.read(updateDeckUseCaseProvider).execute(updated);
     ref.invalidateSelf();
   }
 }

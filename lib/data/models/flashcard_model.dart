@@ -11,6 +11,13 @@ class FlashcardModel {
   final int intervalDays;
   final int repetitions;
   final String dueDate;
+  final String? frontImagePath;
+  final String? backImagePath;
+  final int queue;
+  final int cardType;
+  final int lapses;
+  final int remainingSteps;
+  final int pendingImage;
 
   const FlashcardModel({
     required this.id,
@@ -22,6 +29,13 @@ class FlashcardModel {
     required this.intervalDays,
     required this.repetitions,
     required this.dueDate,
+    this.frontImagePath,
+    this.backImagePath,
+    this.queue = 0,
+    this.cardType = 0,
+    this.lapses = 0,
+    this.remainingSteps = 0,
+    this.pendingImage = 0,
   });
 
   factory FlashcardModel.fromMap(Map<String, dynamic> map) => FlashcardModel(
@@ -34,6 +48,13 @@ class FlashcardModel {
         intervalDays: map['interval_days'] as int,
         repetitions: map['repetitions'] as int,
         dueDate: map['due_date'] as String,
+        frontImagePath: map['front_image_path'] as String?,
+        backImagePath: map['back_image_path'] as String?,
+        queue: map['queue'] as int? ?? 0,
+        cardType: map['card_type'] as int? ?? 0,
+        lapses: map['lapses'] as int? ?? 0,
+        remainingSteps: map['remaining_steps'] as int? ?? 0,
+        pendingImage: map['pending_image'] as int? ?? 0,
       );
 
   Map<String, dynamic> toMap() => {
@@ -46,6 +67,13 @@ class FlashcardModel {
         'interval_days': intervalDays,
         'repetitions': repetitions,
         'due_date': dueDate,
+        'front_image_path': frontImagePath,
+        'back_image_path': backImagePath,
+        'queue': queue,
+        'card_type': cardType,
+        'lapses': lapses,
+        'remaining_steps': remainingSteps,
+        'pending_image': pendingImage,
       };
 
   Flashcard toEntity() => Flashcard(
@@ -58,6 +86,13 @@ class FlashcardModel {
         interval: intervalDays,
         repetitions: repetitions,
         dueDate: DateTime.parse(dueDate),
+        frontImagePath: frontImagePath,
+        backImagePath: backImagePath,
+        queue: CardQueue.fromValue(queue),
+        cardType: CardType.fromValue(cardType),
+        lapses: lapses,
+        remainingSteps: remainingSteps,
+        pendingImage: pendingImage == 1,
       );
 
   factory FlashcardModel.fromEntity(Flashcard card) => FlashcardModel(
@@ -70,5 +105,12 @@ class FlashcardModel {
         intervalDays: card.interval,
         repetitions: card.repetitions,
         dueDate: card.dueDate.toIso8601String(),
+        frontImagePath: card.frontImagePath,
+        backImagePath: card.backImagePath,
+        queue: card.queue.value,
+        cardType: card.cardType.value,
+        lapses: card.lapses,
+        remainingSteps: card.remainingSteps,
+        pendingImage: card.pendingImage ? 1 : 0,
       );
 }

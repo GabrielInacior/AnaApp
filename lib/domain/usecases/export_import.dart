@@ -36,6 +36,9 @@ class ExportImport {
         'name': deck.name,
         'description': deck.description,
         'createdAt': deck.createdAt.toIso8601String(),
+        'isFavorite': deck.isFavorite,
+        'colorValue': deck.colorValue,
+        'tags': deck.tags,
         'cards': cards
             .map((c) => {
                   'id': c.id,
@@ -46,12 +49,17 @@ class ExportImport {
                   'interval': c.interval,
                   'repetitions': c.repetitions,
                   'dueDate': c.dueDate.toIso8601String(),
+                  'queue': c.queue.value,
+                  'cardType': c.cardType.value,
+                  'lapses': c.lapses,
+                  'remainingSteps': c.remainingSteps,
+                  // Image paths not exported (not portable between devices)
                 })
             .toList(),
       });
     }
 
-    final json = jsonEncode({'version': 1, 'decks': deckData});
+    final json = jsonEncode({'version': 2, 'decks': deckData});
     final bytes = Uint8List.fromList(utf8.encode(json));
     final now = DateTime.now();
     final fileName =
@@ -78,20 +86,30 @@ class ExportImport {
     final content = utf8.decode(result.files.first.bytes!);
     final data = jsonDecode(content) as Map<String, dynamic>;
 
-    if (data['version'] != 1 || data['decks'] == null) {
-      throw const FormatException('Arquivo de backup inválido.');
+    final version = data['version'] as int?;
+    if ((version != 1 && version != 2) || data['decks'] == null) {
+      throw const FormatException('Arquivo de backup invalido.');
     }
 
     int imported = 0;
     final now = DateTime.now();
 
     for (final deckData in data['decks'] as List) {
+      // Parse tags (v2+)
+      final rawTags = deckData['tags'];
+      final List<String> tags = rawTags is List
+          ? rawTags.cast<String>()
+          : const [];
+
       final deck = Deck(
         id: _uuid.v4(),
         name: deckData['name'] as String,
         description: deckData['description'] as String?,
         createdAt:
             DateTime.tryParse(deckData['createdAt'] as String? ?? '') ?? now,
+        isFavorite: deckData['isFavorite'] as bool? ?? false,
+        colorValue: deckData['colorValue'] as int?,
+        tags: tags,
       );
       await _deckRepo.createDeck(deck);
 
@@ -105,10 +123,16 @@ class ExportImport {
           createdAt:
               DateTime.tryParse(c['createdAt'] as String? ?? '') ?? now,
           easeFactor:
-              (c['easeFactor'] as num?)?.toDouble() ?? SM2.initialEaseFactor,
+              (c['easeFactor'] as num?)?.toDouble() ?? AnkiScheduler.initialEaseFactor,
           interval: (c['interval'] as int?) ?? 0,
           repetitions: (c['repetitions'] as int?) ?? 0,
           dueDate: DateTime.tryParse(c['dueDate'] as String? ?? '') ?? now,
+          // v2 fields (default to new card state for v1 imports)
+          queue: CardQueue.fromValue((c['queue'] as int?) ?? 0),
+          cardType: CardType.fromValue((c['cardType'] as int?) ?? 0),
+          lapses: (c['lapses'] as int?) ?? 0,
+          remainingSteps: (c['remainingSteps'] as int?) ?? 0,
+          // Image paths are not imported (not portable)
         );
       }).toList();
 

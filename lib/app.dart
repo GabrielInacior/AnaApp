@@ -3,6 +3,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
+import 'presentation/providers/theme_provider.dart';
 import 'presentation/providers/user_provider.dart';
 import 'presentation/screens/onboarding/onboarding_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
@@ -13,6 +14,7 @@ class AnaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(userProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
@@ -21,7 +23,7 @@ class AnaApp extends ConsumerWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(dynamicScheme: lightDynamic),
           darkTheme: AppTheme.dark(dynamicScheme: darkDynamic),
-          themeMode: ThemeMode.system,
+          themeMode: themeMode,
           home: userAsync.when(
             data: (user) =>
                 user == null ? const OnboardingScreen() : const HomeScreen(),

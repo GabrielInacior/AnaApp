@@ -1,16 +1,62 @@
 // lib/domain/entities/flashcard.dart
+
+/// Card queue (where the card lives in the scheduling system)
+enum CardQueue {
+  newCard(0),
+  learning(1),
+  review(2),
+  relearning(3);
+
+  final int value;
+  const CardQueue(this.value);
+
+  static CardQueue fromValue(int v) => CardQueue.values.firstWhere(
+        (q) => q.value == v,
+        orElse: () => CardQueue.newCard,
+      );
+}
+
+/// Card type (permanent classification)
+enum CardType {
+  newCard(0),
+  learning(1),
+  review(2),
+  relearning(3);
+
+  final int value;
+  const CardType(this.value);
+
+  static CardType fromValue(int v) => CardType.values.firstWhere(
+        (t) => t.value == v,
+        orElse: () => CardType.newCard,
+      );
+}
+
 class Flashcard {
   final String id;
   final String deckId;
-  final String front;    // frase em inglês
-  final String back;     // tradução em português
+  final String front;
+  final String back;
   final DateTime createdAt;
 
-  // Campos SM-2
-  final double easeFactor;   // fator de facilidade (inicia em 2.5)
-  final int interval;        // intervalo em dias
-  final int repetitions;     // número de repetições consecutivas corretas
-  final DateTime dueDate;    // próxima data de revisão
+  // SM-2 fields
+  final double easeFactor;
+  final int interval;
+  final int repetitions;
+  final DateTime dueDate;
+
+  // Image paths
+  final String? frontImagePath;
+  final String? backImagePath;
+
+  // Anki-style card state
+  final CardQueue queue;
+  final CardType cardType;
+  final int lapses;
+  final int remainingSteps;
+
+  // Image generation pending flag
+  final bool pendingImage;
 
   const Flashcard({
     required this.id,
@@ -22,6 +68,13 @@ class Flashcard {
     this.interval = 0,
     this.repetitions = 0,
     required this.dueDate,
+    this.frontImagePath,
+    this.backImagePath,
+    this.queue = CardQueue.newCard,
+    this.cardType = CardType.newCard,
+    this.lapses = 0,
+    this.remainingSteps = 0,
+    this.pendingImage = false,
   });
 
   Flashcard copyWith({
@@ -31,6 +84,15 @@ class Flashcard {
     int? interval,
     int? repetitions,
     DateTime? dueDate,
+    String? frontImagePath,
+    bool clearFrontImage = false,
+    String? backImagePath,
+    bool clearBackImage = false,
+    CardQueue? queue,
+    CardType? cardType,
+    int? lapses,
+    int? remainingSteps,
+    bool? pendingImage,
   }) {
     return Flashcard(
       id: id,
@@ -42,6 +104,15 @@ class Flashcard {
       interval: interval ?? this.interval,
       repetitions: repetitions ?? this.repetitions,
       dueDate: dueDate ?? this.dueDate,
+      frontImagePath:
+          clearFrontImage ? null : (frontImagePath ?? this.frontImagePath),
+      backImagePath:
+          clearBackImage ? null : (backImagePath ?? this.backImagePath),
+      queue: queue ?? this.queue,
+      cardType: cardType ?? this.cardType,
+      lapses: lapses ?? this.lapses,
+      remainingSteps: remainingSteps ?? this.remainingSteps,
+      pendingImage: pendingImage ?? this.pendingImage,
     );
   }
 }

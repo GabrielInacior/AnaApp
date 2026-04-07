@@ -11,4 +11,6 @@ abstract interface class FlashcardRepository {
   Future<void> deleteCard(String id);
   Future<int> countCardsByDeck(String deckId);
   Future<int> countDueCardsByDeck(String deckId, DateTime now);
+  Future<Map<String, int>> getMasteryDistribution();
+  Future<List<MapEntry<DateTime, int>>> getDueForecast(int days);
 }
