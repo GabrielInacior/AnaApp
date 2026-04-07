@@ -21,8 +21,11 @@ class OpenAIClient {
     required String prompt,
     required String topic,
     int maxCards = 20,
+    bool isPdfLineByLine = false,
   }) async {
-    final systemPrompt = _buildSystemPrompt(topic, maxCards);
+    final systemPrompt = isPdfLineByLine
+        ? _buildPdfLineByLinePrompt()
+        : _buildSystemPrompt(topic, maxCards);
 
     final body = jsonEncode({
       'model': OpenAIConstants.model,
@@ -68,6 +71,32 @@ class OpenAIClient {
     } catch (_) {
       throw const AIFailure('Não foi possível interpretar a resposta da IA.');
     }
+  }
+
+  String _buildPdfLineByLinePrompt() {
+    return '''
+Você é um especialista em extrair flashcards de documentos bilíngues de estudo de idiomas.
+
+O texto a seguir foi extraído de um PDF de estudos que contém pares bilíngues já prontos:
+- Uma frase no idioma estrangeiro (ex: inglês, espanhol, francês, etc.)
+- Seguida imediatamente pela tradução em português brasileiro
+
+Sua tarefa:
+1. Identifique TODOS os pares bilíngues no texto
+2. Junte fragmentos de frases que foram quebrados em múltiplas linhas
+3. front = frase completa no idioma estrangeiro
+4. back = tradução completa em português brasileiro
+5. Ignore completamente: títulos, cabeçalhos, rodapés, marcas d'água, números de página, strings codificadas
+
+Regras:
+- Extraia o MÁXIMO de pares possível — não limite a quantidade
+- Mantenha as frases exatamente como estão no documento (não reescreva)
+- Se uma frase está quebrada em 2-3 linhas, junte-a em uma frase completa
+- NÃO invente ou adicione pares que não existem no texto
+
+Responda APENAS com um array JSON válido, sem markdown, sem explicações:
+[{"front": "...", "back": "..."}, ...]
+''';
   }
 
   String _buildSystemPrompt(String topic, int maxCards) {

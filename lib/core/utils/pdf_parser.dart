@@ -2,16 +2,10 @@ import 'dart:typed_data';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 enum PdfParseMode {
-  /// Linha ímpar = inglês, linha par = português
+  /// IA identifica pares bilíngues no texto (inglês/português)
   lineByLine,
   /// IA interpreta o texto livremente (texto bruto enviado para OpenAI)
   aiInterpreted,
-}
-
-class ParsedCardPair {
-  final String front;
-  final String back;
-  const ParsedCardPair({required this.front, required this.back});
 }
 
 class PdfParser {
@@ -26,19 +20,25 @@ class PdfParser {
     return text;
   }
 
-  /// Modo lineByLine: cada par de linhas consecutivas forma um card
-  static List<ParsedCardPair> parseLineByLine(String rawText) {
-    final lines = rawText
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+  /// Modo lineByLine: limpa ruído e retorna texto para a IA extrair pares
+  /// A IA é quem identifica os pares bilíngues no texto
+  static String prepareLineByLineForAI(String rawText) {
+    final lines = rawText.split('\n').map((l) => l.trim()).toList();
 
-    final pairs = <ParsedCardPair>[];
-    for (int i = 0; i + 1 < lines.length; i += 2) {
-      pairs.add(ParsedCardPair(front: lines[i], back: lines[i + 1]));
-    }
-    return pairs;
+    // Filter out noise: copyright lines, base64 strings, page numbers, empty
+    final cleaned = lines.where((l) {
+      if (l.isEmpty) return false;
+      if (l.length < 3) return false;
+      // Base64-encoded strings
+      if (RegExp(r'^[A-Za-z0-9+/=]{20,}$').hasMatch(l)) return false;
+      // Copyright / watermark lines
+      if (l.contains('©') || l.contains('CIMV')) return false;
+      // Pure page numbers
+      if (RegExp(r'^\d{1,3}$').hasMatch(l)) return false;
+      return true;
+    }).toList();
+
+    return cleaned.join('\n');
   }
 
   /// Modo aiInterpreted: retorna o texto bruto para a IA processar

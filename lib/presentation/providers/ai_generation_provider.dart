@@ -121,12 +121,13 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
       List<Flashcard> cards;
 
       if (parseMode == PdfParseMode.lineByLine) {
-        final pairs = PdfParser.parseLineByLine(rawText);
-        cards = await useCase.fromParsedPairs(
+        final text = PdfParser.prepareLineByLineForAI(rawText);
+        cards = await useCase.execute(
           deckId: deckId,
-          pairs: pairs
-              .map((p) => (front: p.front, back: p.back))
-              .toList(),
+          input: text,
+          inputType: AIInputType.pdfLineByLine,
+          topic: topic,
+          maxCards: maxCards,
         );
       } else {
         final text = PdfParser.prepareTextForAI(rawText);

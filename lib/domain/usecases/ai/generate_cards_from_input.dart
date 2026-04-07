@@ -48,8 +48,11 @@ class GenerateCardsFromInput {
         prompt =
             'Extraia e gere até $maxCards flashcards a partir deste texto:\n\n$input';
       case AIInputType.pdfLineByLine:
-        throw const ParseFailure(
-            'pdfLineByLine deve ser processado antes de chamar este use case.');
+        prompt =
+            'Este documento contém pares bilíngues já prontos (frases em um idioma seguidas da tradução em outro). '
+            'Identifique TODOS os pares de frases e extraia-os como flashcards. '
+            'Cada par forma um card: front = frase no idioma estrangeiro, back = tradução em português. '
+            'Junte fragmentos que continuam a mesma frase. Ignore cabeçalhos, rodapés e marcas d\'água.\n\n$input';
     }
 
     final generated = await _aiClient.generateCards(
@@ -57,6 +60,7 @@ class GenerateCardsFromInput {
       prompt: prompt,
       topic: topic,
       maxCards: maxCards,
+      isPdfLineByLine: inputType == AIInputType.pdfLineByLine,
     );
 
     final now = DateTime.now();
@@ -72,27 +76,6 @@ class GenerateCardsFromInput {
             ))
         .toList();
 
-    await _cardRepository.addCards(cards);
-    return cards;
-  }
-
-  /// Para o modo PDF line-by-line: recebe pares prontos e salva diretamente
-  Future<List<Flashcard>> fromParsedPairs({
-    required String deckId,
-    required List<({String front, String back})> pairs,
-  }) async {
-    final now = DateTime.now();
-    final cards = pairs
-        .map((p) => Flashcard(
-              id: _uuid.v4(),
-              deckId: deckId,
-              front: p.front,
-              back: p.back,
-              createdAt: now,
-              dueDate: now,
-              easeFactor: AnkiScheduler.initialEaseFactor,
-            ))
-        .toList();
     await _cardRepository.addCards(cards);
     return cards;
   }

@@ -289,10 +289,8 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
             ] else ...[
               _buildSourceSection(theme, colorScheme, isDark),
               const SizedBox(height: 20),
-              if (_sourceMode == _SourceMode.topic)
-                _buildTopicSection(theme, colorScheme, isDark),
-              if (_sourceMode == _SourceMode.topic)
-                const SizedBox(height: 20),
+              _buildTopicSection(theme, colorScheme, isDark),
+              const SizedBox(height: 20),
               _buildQuantitySection(theme, colorScheme, isDark),
               const SizedBox(height: 20),
               _buildImageToggle(theme, colorScheme, isDark),
@@ -877,9 +875,9 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                 children: [
                   RadioListTile<PdfParseMode>(
                     value: PdfParseMode.lineByLine,
-                    title: const Text('Linha a linha'),
+                    title: const Text('Pares prontos'),
                     subtitle: const Text(
-                      'Linha impar = ingles, linha par = traducao',
+                      'A IA identifica pares bilíngues já existentes no PDF',
                     ),
                     contentPadding: EdgeInsets.zero,
                     shape: RoundedRectangleBorder(
