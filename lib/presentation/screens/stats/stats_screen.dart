@@ -234,7 +234,6 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
   // ============================================================
   Widget _buildOverviewCards(BuildContext context, FullStats stats) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
     return GridView.count(
@@ -251,9 +250,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
           value: '${stats.todayCount}',
           icon: Icons.today_rounded,
           gradientColors: isDark
-              ? [colorScheme.surfaceContainerHigh, colorScheme.surfaceContainerHigh]
+              ? const [Color(0xFF3D1529), Color(0xFF4A1B33)]
               : const [Color(0xFFFCE4EC), Color(0xFFF8BBD0)],
-          iconColor: isDark ? colorScheme.primary : const Color(0xFFAD1457),
+          iconColor: isDark ? const Color(0xFFF48FB1) : const Color(0xFFAD1457),
         ),
         // Sequência
         _OverviewCard(
@@ -261,9 +260,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
           value: '${stats.streakDays} dias',
           icon: Icons.local_fire_department_rounded,
           gradientColors: isDark
-              ? [colorScheme.surfaceContainerHigh, colorScheme.surfaceContainerHigh]
+              ? const [Color(0xFF3D2A14), Color(0xFF4A3018)]
               : const [Color(0xFFFFF3E0), Color(0xFFFFE0B2)],
-          iconColor: isDark ? colorScheme.tertiary : const Color(0xFFE65100),
+          iconColor: isDark ? const Color(0xFFFFB74D) : const Color(0xFFE65100),
         ),
         // Total (30d)
         _OverviewCard(
@@ -271,9 +270,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
           value: '${stats.total30dReviews}',
           icon: Icons.layers_rounded,
           gradientColors: isDark
-              ? [colorScheme.surfaceContainerHigh, colorScheme.surfaceContainerHigh]
+              ? const [Color(0xFF261B3D), Color(0xFF2E2148)]
               : const [Color(0xFFEDE7F6), Color(0xFFD1C4E9)],
-          iconColor: isDark ? colorScheme.secondary : const Color(0xFF5E35B1),
+          iconColor: isDark ? const Color(0xFFB39DDB) : const Color(0xFF5E35B1),
         ),
         // Precisão
         _OverviewCard(
@@ -281,7 +280,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
           value: '${(stats.accuracy30d * 100).round()}%',
           icon: Icons.check_circle_outline_rounded,
           gradientColors: isDark
-              ? [colorScheme.surfaceContainerHigh, colorScheme.surfaceContainerHigh]
+              ? const [Color(0xFF1B3D24), Color(0xFF20482C)]
               : const [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
           iconColor: isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32),
         ),
@@ -762,13 +761,19 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
       decoration: BoxDecoration(
         color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: isDark
-            ? null
-            : Border.all(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-              ),
+        border: Border.all(
+          color: isDark
+              ? colorScheme.outlineVariant.withValues(alpha: 0.15)
+              : colorScheme.outlineVariant.withValues(alpha: 0.3),
+        ),
         boxShadow: isDark
-            ? null
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 2),
+                ),
+              ]
             : [
                 BoxShadow(
                   color: colorScheme.primary.withValues(alpha: 0.06),
@@ -797,13 +802,15 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             gradient: isDark
-                ? null
+                ? LinearGradient(
+                    colors: [
+                      colorScheme.primary.withValues(alpha: 0.2),
+                      colorScheme.tertiary.withValues(alpha: 0.15),
+                    ],
+                  )
                 : const LinearGradient(
                     colors: [Color(0xFFEDE7F6), Color(0xFFD1C4E9)],
                   ),
-            color: isDark
-                ? colorScheme.primaryContainer.withValues(alpha: 0.3)
-                : null,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
@@ -881,22 +888,25 @@ class _OverviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
       decoration: BoxDecoration(
-        gradient: isDark
-            ? null
-            : LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-        color: isDark ? colorScheme.surfaceContainerHigh : null,
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(22),
-        border: isDark
-            ? null
-            : Border.all(
-                color: gradientColors.last.withValues(alpha: 0.4),
-              ),
+        border: Border.all(
+          color: isDark
+              ? iconColor.withValues(alpha: 0.2)
+              : gradientColors.last.withValues(alpha: 0.4),
+        ),
         boxShadow: isDark
-            ? null
+            ? [
+                BoxShadow(
+                  color: iconColor.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ]
             : [
                 BoxShadow(
                   color: gradientColors.last.withValues(alpha: 0.2),

@@ -2,6 +2,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/image_helper.dart';
 import '../../../domain/entities/deck.dart';
 import '../../../domain/entities/flashcard.dart';
 import '../../providers/ai_generation_provider.dart';
@@ -372,6 +375,7 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                         child: _CardListItem(
                           card: card,
                           isPendingImage: isPending,
+                          onTap: () => _showEditCardSheet(context, card),
                           onDelete: () async {
                             final confirmed =
                                 await _confirmDelete(context);
@@ -400,52 +404,450 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
     final nameCtrl = TextEditingController(text: currentDeck.name);
     final descCtrl =
         TextEditingController(text: currentDeck.description ?? '');
+    int? selectedColor = currentDeck.colorValue;
+    List<String> selectedTags = List.of(currentDeck.tags);
+    bool tagsExpanded = false;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Editar baralho'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome'),
-              textCapitalization: TextCapitalization.sentences,
-              autofocus: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final brightness = Theme.of(ctx).brightness;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Descricao (opcional)'),
-              textCapitalization: TextCapitalization.sentences,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Editar Baralho',
+                      style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: nameCtrl,
+                    autofocus: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Nome do baralho'),
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Descricao (opcional)'),
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: 18),
+                  Text('Cor do baralho',
+                      style: Theme.of(ctx).textTheme.labelLarge),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _buildColorCircle(
+                        context: ctx,
+                        color: null,
+                        isSelected: selectedColor == null,
+                        onTap: () =>
+                            setSheetState(() => selectedColor = null),
+                      ),
+                      for (final colorValue in AppColors.deckColorValues)
+                        _buildColorCircle(
+                          context: ctx,
+                          color: AppColors.getDeckColor(colorValue,
+                              brightness: brightness),
+                          isSelected: selectedColor == colorValue,
+                          onTap: () =>
+                              setSheetState(() => selectedColor = colorValue),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Tags section (collapsible)
+                  GestureDetector(
+                    onTap: () =>
+                        setSheetState(() => tagsExpanded = !tagsExpanded),
+                    child: Row(
+                      children: [
+                        Text('Tags',
+                            style: Theme.of(ctx).textTheme.labelLarge),
+                        const Spacer(),
+                        if (!tagsExpanded && selectedTags.isEmpty)
+                          Text('Nenhuma',
+                              style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                              )),
+                        Icon(tagsExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded),
+                      ],
+                    ),
+                  ),
+                  if (!tagsExpanded && selectedTags.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: selectedTags.map((tag) => Chip(
+                          label: Text(tag, style: const TextStyle(fontSize: 12)),
+                          deleteIcon: const Icon(Icons.close_rounded, size: 14),
+                          onDeleted: () => setSheetState(() => selectedTags.remove(tag)),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        )).toList(),
+                      ),
+                    ),
+                  AnimatedCrossFade(
+                    duration: const Duration(milliseconds: 300),
+                    crossFadeState: tagsExpanded
+                        ? CrossFadeState.showFirst
+                        : CrossFadeState.showSecond,
+                    firstChild: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AppColors.predefinedTags.map((tag) {
+                          final isSelected = selectedTags.contains(tag);
+                          return FilterChip(
+                            label: Text(tag),
+                            selected: isSelected,
+                            onSelected: (v) => setSheetState(() {
+                              if (v) {
+                                selectedTags.add(tag);
+                              } else {
+                                selectedTags.remove(tag);
+                              }
+                            }),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20)),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    secondChild: const SizedBox.shrink(),
+                  ),
+
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () async {
+                        final name = nameCtrl.text.trim();
+                        if (name.isEmpty) return;
+                        final descText = descCtrl.text.trim();
+                        final updated = currentDeck.copyWith(
+                          name: name,
+                          description: descText.isEmpty ? null : descText,
+                          clearDescription: descText.isEmpty,
+                          colorValue: selectedColor,
+                          clearColor: selectedColor == null,
+                          tags: selectedTags.isEmpty ? null : selectedTags,
+                        );
+                        await ref.read(deckProvider.notifier).updateDeck(updated);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                      child: const Text('Salvar'),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-              final descText = descCtrl.text.trim();
-              final updated = currentDeck.copyWith(
-                name: name,
-                description: descText.isEmpty ? null : descText,
-                clearDescription: descText.isEmpty,
-              );
-              await ref.read(deckProvider.notifier).updateDeck(updated);
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Salvar'),
-          ),
-        ],
+          );
+        },
       ),
     );
+  }
+
+  Widget _buildColorCircle({
+    required BuildContext context,
+    required Color? color,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    const size = 40.0;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color ?? theme.colorScheme.surfaceContainerHighest,
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.outline.withValues(alpha: 0.2),
+            width: isSelected ? 3 : 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: (color ?? theme.colorScheme.primary)
+                        .withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: color == null
+            ? Icon(Icons.block_rounded,
+                size: 18, color: theme.colorScheme.onSurfaceVariant)
+            : isSelected
+                ? const Icon(Icons.check_rounded,
+                    size: 18, color: Colors.white)
+                : null,
+      ),
+    );
+  }
+
+  void _showEditCardSheet(BuildContext context, Flashcard card) {
+    final frontCtrl = TextEditingController(text: card.front);
+    final backCtrl = TextEditingController(text: card.back);
+    String? frontImagePath = card.frontImagePath;
+    String? backImagePath = card.backImagePath;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final theme = Theme.of(ctx);
+          final colorScheme = theme.colorScheme;
+
+          Widget buildImageSection(String label, String? imagePath,
+              {required bool isFront}) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                if (imagePath != null)
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.file(
+                          File(imagePath),
+                          height: 120,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Center(
+                              child: Icon(Icons.broken_image_rounded,
+                                  color: colorScheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _miniIconButton(
+                              icon: Icons.swap_horiz_rounded,
+                              color: colorScheme.primaryContainer,
+                              iconColor: colorScheme.onPrimaryContainer,
+                              onTap: () => _pickImage(isFront, setSheetState,
+                                  (path) {
+                                if (isFront) {
+                                  frontImagePath = path;
+                                } else {
+                                  backImagePath = path;
+                                }
+                              }),
+                            ),
+                            const SizedBox(width: 4),
+                            _miniIconButton(
+                              icon: Icons.close_rounded,
+                              color: colorScheme.errorContainer,
+                              iconColor: colorScheme.onErrorContainer,
+                              onTap: () => setSheetState(() {
+                                if (isFront) {
+                                  frontImagePath = null;
+                                } else {
+                                  backImagePath = null;
+                                }
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  InkWell(
+                    onTap: () => _pickImage(isFront, setSheetState, (path) {
+                      if (isFront) {
+                        frontImagePath = path;
+                      } else {
+                        backImagePath = path;
+                      }
+                    }),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      height: 64,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_photo_alternate_rounded,
+                              size: 20, color: colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 8),
+                          Text('Adicionar imagem',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Editar Card',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: frontCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Frente'),
+                    textCapitalization: TextCapitalization.sentences,
+                    maxLines: 3,
+                    minLines: 1,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: backCtrl,
+                    decoration: const InputDecoration(labelText: 'Verso'),
+                    textCapitalization: TextCapitalization.sentences,
+                    maxLines: 3,
+                    minLines: 1,
+                  ),
+                  const SizedBox(height: 18),
+                  buildImageSection('Imagem da frente', frontImagePath,
+                      isFront: true),
+                  const SizedBox(height: 14),
+                  buildImageSection('Imagem do verso', backImagePath,
+                      isFront: false),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () async {
+                        final front = frontCtrl.text.trim();
+                        final back = backCtrl.text.trim();
+                        if (front.isEmpty || back.isEmpty) return;
+
+                        final updated = card.copyWith(
+                          front: front,
+                          back: back,
+                          frontImagePath: frontImagePath,
+                          clearFrontImage: frontImagePath == null &&
+                              card.frontImagePath != null,
+                          backImagePath: backImagePath,
+                          clearBackImage: backImagePath == null &&
+                              card.backImagePath != null,
+                        );
+                        await ref
+                            .read(flashcardRepositoryProvider)
+                            .updateCard(updated);
+                        ref.invalidate(cardsByDeckProvider);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                      child: const Text('Salvar'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _miniIconButton({
+    required IconData icon,
+    required Color color,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 18, color: iconColor),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(bool isFront, StateSetter setSheetState,
+      void Function(String path) onPicked) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    final path = await ImageHelper.saveImage(bytes);
+    setSheetState(() => onPicked(path));
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
@@ -581,11 +983,13 @@ class _SummaryPill extends StatelessWidget {
 class _CardListItem extends StatelessWidget {
   final Flashcard card;
   final VoidCallback onDelete;
+  final VoidCallback? onTap;
   final bool isPendingImage;
 
   const _CardListItem({
     required this.card,
     required this.onDelete,
+    this.onTap,
     this.isPendingImage = false,
   });
 
@@ -641,6 +1045,7 @@ class _CardListItem extends StatelessWidget {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: leadingWidget,
+      onTap: onTap,
       title: Text(
         card.front,
         style: theme.textTheme.bodyMedium?.copyWith(
@@ -670,6 +1075,12 @@ class _CardListItem extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
+          IconButton(
+            icon: Icon(Icons.edit_rounded,
+                size: 18, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+            onPressed: onTap,
+            tooltip: 'Editar card',
+          ),
           IconButton(
             icon: Icon(Icons.delete_outline_rounded,
                 size: 20, color: colorScheme.error.withValues(alpha: 0.7)),

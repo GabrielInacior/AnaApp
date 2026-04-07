@@ -7,6 +7,7 @@ class DeckCardWidget extends StatelessWidget {
   final Deck deck;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
   final VoidCallback? onToggleFavorite;
 
   const DeckCardWidget({
@@ -14,6 +15,7 @@ class DeckCardWidget extends StatelessWidget {
     required this.deck,
     required this.onTap,
     this.onDelete,
+    this.onEdit,
     this.onToggleFavorite,
   });
 
@@ -86,8 +88,11 @@ class DeckCardWidget extends StatelessWidget {
                         isFavorite: deck.isFavorite,
                         onPressed: onToggleFavorite!,
                       ),
-                    if (onDelete != null)
-                      _OverflowMenu(onDelete: onDelete!),
+                    if (onDelete != null || onEdit != null)
+                      _OverflowMenu(
+                        onDelete: onDelete,
+                        onEdit: onEdit,
+                      ),
                   ],
                 ),
 
@@ -204,9 +209,10 @@ class _FavoriteButton extends StatelessWidget {
 }
 
 class _OverflowMenu extends StatelessWidget {
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
 
-  const _OverflowMenu({required this.onDelete});
+  const _OverflowMenu({this.onDelete, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -229,23 +235,37 @@ class _OverflowMenu extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         onSelected: (value) {
-          if (value == 'delete') onDelete();
+          if (value == 'delete') onDelete?.call();
+          if (value == 'edit') onEdit?.call();
         },
         itemBuilder: (context) => [
-          PopupMenuItem<String>(
-            value: 'delete',
-            child: Row(
-              children: [
-                Icon(Icons.delete_outline_rounded,
-                    size: 20, color: colorScheme.error),
-                const SizedBox(width: 12),
-                Text(
-                  'Excluir baralho',
-                  style: TextStyle(color: colorScheme.error),
-                ),
-              ],
+          if (onEdit != null)
+            PopupMenuItem<String>(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_rounded,
+                      size: 20, color: colorScheme.onSurface),
+                  const SizedBox(width: 12),
+                  const Text('Editar baralho'),
+                ],
+              ),
             ),
-          ),
+          if (onDelete != null)
+            PopupMenuItem<String>(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline_rounded,
+                      size: 20, color: colorScheme.error),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Excluir baralho',
+                    style: TextStyle(color: colorScheme.error),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

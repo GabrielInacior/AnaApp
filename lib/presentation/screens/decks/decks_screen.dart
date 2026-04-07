@@ -228,6 +228,7 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
                   page: DeckDetailScreen(deck: deck),
                 ),
               ),
+              onEdit: () => _showEditDeckSheet(context, deck),
               onDelete: () =>
                   _confirmDelete(context, deck.id, deck.name),
               onToggleFavorite: () => ref
@@ -397,6 +398,176 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
                       child: const Text('Criar'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditDeckSheet(BuildContext context, dynamic deck) {
+    final nameController = TextEditingController(text: deck.name);
+    final descController =
+        TextEditingController(text: deck.description ?? '');
+    int? selectedColor = deck.colorValue;
+    List<String> selectedTags = List<String>.from(deck.tags);
+    bool tagsExpanded = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final brightness = Theme.of(ctx).brightness;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Editar Baralho',
+                      style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Nome do baralho'),
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descController,
+                    decoration: const InputDecoration(
+                        labelText: 'Descricao (opcional)'),
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: 18),
+                  Text('Cor do baralho',
+                      style: Theme.of(ctx).textTheme.labelLarge),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _ColorCircle(
+                        color: null,
+                        isSelected: selectedColor == null,
+                        onTap: () =>
+                            setSheetState(() => selectedColor = null),
+                      ),
+                      for (final colorValue in AppColors.deckColorValues)
+                        _ColorCircle(
+                          color: AppColors.getDeckColor(colorValue,
+                              brightness: brightness),
+                          isSelected: selectedColor == colorValue,
+                          onTap: () =>
+                              setSheetState(() => selectedColor = colorValue),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Tags section (collapsible)
+                  GestureDetector(
+                    onTap: () =>
+                        setSheetState(() => tagsExpanded = !tagsExpanded),
+                    child: Row(
+                      children: [
+                        Text('Tags',
+                            style: Theme.of(ctx).textTheme.labelLarge),
+                        const Spacer(),
+                        if (!tagsExpanded && selectedTags.isEmpty)
+                          Text('Nenhuma',
+                              style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                              )),
+                        Icon(tagsExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded),
+                      ],
+                    ),
+                  ),
+                  if (!tagsExpanded && selectedTags.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: selectedTags.map((tag) => Chip(
+                          label: Text(tag, style: const TextStyle(fontSize: 12)),
+                          deleteIcon: const Icon(Icons.close_rounded, size: 14),
+                          onDeleted: () => setSheetState(() => selectedTags.remove(tag)),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        )).toList(),
+                      ),
+                    ),
+                  AnimatedCrossFade(
+                    duration: const Duration(milliseconds: 300),
+                    crossFadeState: tagsExpanded
+                        ? CrossFadeState.showFirst
+                        : CrossFadeState.showSecond,
+                    firstChild: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AppColors.predefinedTags.map((tag) {
+                          final isSelected = selectedTags.contains(tag);
+                          return FilterChip(
+                            label: Text(tag),
+                            selected: isSelected,
+                            onSelected: (v) => setSheetState(() {
+                              if (v) {
+                                selectedTags.add(tag);
+                              } else {
+                                selectedTags.remove(tag);
+                              }
+                            }),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20)),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    secondChild: const SizedBox.shrink(),
+                  ),
+
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () async {
+                        if (nameController.text.trim().isEmpty) return;
+                        final descText = descController.text.trim();
+                        final updated = deck.copyWith(
+                          name: nameController.text.trim(),
+                          description: descText.isEmpty ? null : descText,
+                          clearDescription: descText.isEmpty,
+                          colorValue: selectedColor,
+                          clearColor: selectedColor == null,
+                          tags: selectedTags.isEmpty ? null : selectedTags,
+                        );
+                        await ref.read(deckProvider.notifier).updateDeck(updated);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                      child: const Text('Salvar'),
                     ),
                   ),
                 ],
