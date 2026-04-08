@@ -808,7 +808,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                               : Colors.transparent,
                         ),
                       ),
-                      showCheckmark: isSelected,
+                      showCheckmark: false,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
                     ),
@@ -1003,7 +1003,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                                   : Colors.transparent,
                             ),
                           ),
-                          showCheckmark: isSelected,
+                          showCheckmark: false,
                           padding:
                               const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                           ),
@@ -1200,6 +1200,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
         ],
       ),
       selected: isSelected,
+      showCheckmark: false,
       onSelected: (_) => setState(() => _sourceMode = mode),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
