@@ -120,14 +120,45 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
               ),
             )
           else
-            IconButton(
-              onPressed: hasUntagged && !aiState.isBusy
-                  ? () => _autoTagCards(untaggedCards, knownTags, widget.deck.id)
-                  : null,
-              icon: const Icon(Icons.auto_fix_high_rounded),
-              tooltip: hasUntagged
-                  ? 'Gerar tags para ${untaggedCards.length} card${untaggedCards.length > 1 ? 's' : ''}'
-                  : 'Todos os cards possuem tags',
+            Padding(
+              padding: const EdgeInsets.only(right: 4, top: 8, bottom: 8),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: hasUntagged && !aiState.isBusy
+                        ? () => _autoTagCards(untaggedCards, knownTags, widget.deck.id)
+                        : null,
+                    icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                    label: const Text(
+                      'Gerar tags',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  if (hasUntagged && !aiState.isBusy)
+                    Positioned(
+                      top: -3,
+                      right: -3,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: colorScheme.surface,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           PopupMenuButton<String>(
             onSelected: (value) {
