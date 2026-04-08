@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
@@ -1603,25 +1604,57 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
 
   // ─── Pick image for manual card ────────────────────────────
   Future<void> _pickManualImage(bool isFront) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
-    if (picked == null) return;
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      if (!mounted) return;
 
-    final bytes = await picked.readAsBytes();
-    final savedPath = await ImageHelper.saveImage(bytes);
-
-    setState(() {
-      if (isFront) {
-        _manualFrontImagePath = savedPath;
-      } else {
-        _manualBackImagePath = savedPath;
+      // Copy file directly — more reliable on Android than readAsBytes
+      final srcFile = File(picked.path);
+      if (!await srcFile.exists()) {
+        final bytes = await picked.readAsBytes();
+        if (bytes.isEmpty || !mounted) return;
+        final savedPath = await ImageHelper.saveImage(bytes);
+        setState(() {
+          if (isFront) {
+            _manualFrontImagePath = savedPath;
+          } else {
+            _manualBackImagePath = savedPath;
+          }
+        });
+        return;
       }
-    });
+
+      final dir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory('${dir.path}/card_images');
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+      final ext = picked.name.split('.').lastOrNull ?? 'jpg';
+      final destPath = '${imagesDir.path}/${const Uuid().v4()}.$ext';
+      await srcFile.copy(destPath);
+
+      if (!mounted) return;
+      setState(() {
+        if (isFront) {
+          _manualFrontImagePath = destPath;
+        } else {
+          _manualBackImagePath = destPath;
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao selecionar imagem: $e')),
+        );
+      }
+    }
   }
 }
 

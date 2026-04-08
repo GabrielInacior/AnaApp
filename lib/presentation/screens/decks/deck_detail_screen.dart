@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_helper.dart';
 import '../../../domain/entities/deck.dart';
@@ -1504,17 +1506,46 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
 
   Future<void> _pickImage(bool isFront, StateSetter setSheetState,
       void Function(String path) onPicked) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 85,
-    );
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final path = await ImageHelper.saveImage(bytes);
-    setSheetState(() => onPicked(path));
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      if (!mounted) return;
+
+      // Copy file directly — more reliable on Android than readAsBytes
+      final srcFile = File(picked.path);
+      if (!await srcFile.exists()) {
+        // Fallback: try readAsBytes
+        final bytes = await picked.readAsBytes();
+        if (bytes.isEmpty || !mounted) return;
+        final path = await ImageHelper.saveImage(bytes);
+        setSheetState(() => onPicked(path));
+        return;
+      }
+
+      final dir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory('${dir.path}/card_images');
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+      final ext = picked.name.split('.').lastOrNull ?? 'jpg';
+      final destPath = '${imagesDir.path}/${const Uuid().v4()}.$ext';
+      await srcFile.copy(destPath);
+
+      if (!mounted) return;
+      setSheetState(() => onPicked(destPath));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao selecionar imagem: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _autoTagCards(
