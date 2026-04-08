@@ -18,6 +18,7 @@ class FlashcardModel {
   final int lapses;
   final int remainingSteps;
   final int pendingImage;
+  final String? tag;
 
   const FlashcardModel({
     required this.id,
@@ -36,6 +37,7 @@ class FlashcardModel {
     this.lapses = 0,
     this.remainingSteps = 0,
     this.pendingImage = 0,
+    this.tag,
   });
 
   factory FlashcardModel.fromMap(Map<String, dynamic> map) => FlashcardModel(
@@ -55,6 +57,7 @@ class FlashcardModel {
         lapses: map['lapses'] as int? ?? 0,
         remainingSteps: map['remaining_steps'] as int? ?? 0,
         pendingImage: map['pending_image'] as int? ?? 0,
+        tag: map['tag'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -74,6 +77,7 @@ class FlashcardModel {
         'lapses': lapses,
         'remaining_steps': remainingSteps,
         'pending_image': pendingImage,
+        'tag': tag,
       };
 
   Flashcard toEntity() => Flashcard(
@@ -93,6 +97,7 @@ class FlashcardModel {
         lapses: lapses,
         remainingSteps: remainingSteps,
         pendingImage: pendingImage == 1,
+        tag: tag,
       );
 
   factory FlashcardModel.fromEntity(Flashcard card) => FlashcardModel(
@@ -112,5 +117,6 @@ class FlashcardModel {
         lapses: card.lapses,
         remainingSteps: card.remainingSteps,
         pendingImage: card.pendingImage ? 1 : 0,
+        tag: card.tag,
       );
 }

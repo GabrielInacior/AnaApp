@@ -8,7 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../core/constants/openai_constants.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_helper.dart';
 import '../../../core/utils/pdf_parser.dart';
 import '../../../domain/entities/deck.dart';
@@ -16,6 +16,7 @@ import '../../../domain/entities/flashcard.dart';
 import '../../providers/ai_generation_provider.dart';
 import '../../providers/deck_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../widgets/tag_picker.dart';
 import '../settings/settings_screen.dart';
 
 enum _CreationMode { manual, ai }
@@ -39,9 +40,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   final _backController = TextEditingController();
 
   // --- AI mode: topic chips ---
-  String? _selectedTopic;
-  final _customTopicController = TextEditingController();
-  bool _showCustomTopic = false;
+  final Set<String> _selectedTopics = {};
   bool _topicExpanded = true;
 
   // --- AI mode: quantity ---
@@ -56,6 +55,8 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   Uint8List? _pdfBytes;
   String? _pdfName;
   PdfParseMode _parseMode = PdfParseMode.lineByLine;
+  final _pdfInstructionsController = TextEditingController();
+  bool _isPptx = false;
 
   // --- AI mode: images ---
   bool _generateImages = false;
@@ -64,6 +65,10 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   String? _manualFrontImagePath;
   String? _manualBackImagePath;
 
+  // --- Manual mode: tag ---
+  String? _manualSelectedTag;
+  bool _manualTagExpanded = true;
+
   // --- API key check ---
   bool _hasApiKey = false;
 
@@ -71,6 +76,14 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   void initState() {
     super.initState();
     _checkApiKey();
+    // Reset stale generation results (from a previous session/deck)
+    // but only if images are NOT actively generating
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final aiState = ref.read(aiGenerationProvider);
+      if (!aiState.isGeneratingImages && !aiState.isLoading) {
+        ref.read(aiGenerationProvider.notifier).reset();
+      }
+    });
   }
 
   Future<void> _checkApiKey() async {
@@ -85,19 +98,204 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   void dispose() {
     _frontController.dispose();
     _backController.dispose();
-    _customTopicController.dispose();
+
     _descriptionController.dispose();
     _textController.dispose();
+    _pdfInstructionsController.dispose();
     super.dispose();
   }
 
   // ───────────────────── topic resolution ─────────────────────
   String _resolveTopic() {
-    if (_selectedTopic == null && _showCustomTopic) {
-      final custom = _customTopicController.text.trim();
-      return custom.isEmpty ? 'Geral' : custom;
+    if (_selectedTopics.isEmpty) return 'Geral';
+    return _selectedTopics.join(', ');
+  }
+
+  /// Tags to send to AI: selected topics become the available tags
+  List<String> _resolveAvailableTags() {
+    if (_selectedTopics.isNotEmpty) return _selectedTopics.toList();
+    return widget.deck.tags;
+  }
+
+  Future<void> _handleTagLongPress(String tag) async {
+    final notifier = ref.read(allTagsProvider.notifier);
+    final count = await notifier.countCardsWithTag(tag);
+    if (!mounted) return;
+    final confirmed = await showDeleteTagDialog(
+      context,
+      tagName: tag,
+      cardsWithTag: count,
+    );
+    if (confirmed) {
+      await notifier.deleteTag(tag, clearFromCards: true);
+      if (mounted) {
+        setState(() => _selectedTopics.remove(tag));
+        ref.invalidate(cardsByDeckProvider);
+      }
     }
-    return _selectedTopic ?? 'Geral';
+  }
+
+  void _showCreateTagModal(BuildContext ctx) {
+    final controller = TextEditingController();
+    int? selectedColorValue;
+
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final theme = Theme.of(sheetCtx);
+          final colorScheme = theme.colorScheme;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text('Nova tag',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    )),
+                const SizedBox(height: 4),
+                Text(
+                  'Crie uma tag personalizada para organizar seus cards',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Nome da tag',
+                    hintText: 'Ex: Anatomia, React, ENEM...',
+                    prefixIcon: const Icon(Icons.label_rounded),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 20),
+                Text('Cor da tag', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    GestureDetector(
+                      onTap: () =>
+                          setSheetState(() => selectedColorValue = null),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colorScheme.surfaceContainerHighest,
+                          border: Border.all(
+                            color: selectedColorValue == null
+                                ? colorScheme.primary
+                                : colorScheme.outline
+                                    .withValues(alpha: 0.2),
+                            width: selectedColorValue == null ? 3 : 1.5,
+                          ),
+                        ),
+                        child: Icon(Icons.auto_awesome_rounded,
+                            size: 16,
+                            color: colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                    for (final colorVal in AppColors.tagColorValues)
+                      GestureDetector(
+                        onTap: () => setSheetState(
+                            () => selectedColorValue = colorVal),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(colorVal),
+                            border: Border.all(
+                              color: selectedColorValue == colorVal
+                                  ? colorScheme.primary
+                                  : colorScheme.outline
+                                      .withValues(alpha: 0.2),
+                              width:
+                                  selectedColorValue == colorVal ? 3 : 1.5,
+                            ),
+                            boxShadow: selectedColorValue == colorVal
+                                ? [
+                                    BoxShadow(
+                                      color: Color(colorVal)
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: selectedColorValue == colorVal
+                              ? const Icon(Icons.check_rounded,
+                                  size: 18, color: Colors.white)
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final text = controller.text.trim();
+                      if (text.isNotEmpty) {
+                        await ref
+                            .read(allTagsProvider.notifier)
+                            .addTag(text, colorValue: selectedColorValue);
+                        setState(() => _selectedTopics.add(text));
+                        if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                      }
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Criar tag'),
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // ───────────────────── manual card creation ─────────────────
@@ -120,6 +318,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
       dueDate: DateTime.now(),
       frontImagePath: _manualFrontImagePath,
       backImagePath: _manualBackImagePath,
+      tag: _manualSelectedTag,
     );
     await ref.read(flashcardRepositoryProvider).addCard(flashcard);
     ref.invalidate(cardsByDeckProvider);
@@ -155,6 +354,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   Future<void> _generate(AIGenerationNotifier notifier) async {
     notifier.reset();
     final topic = _resolveTopic();
+    final tags = _resolveAvailableTags();
 
     switch (_sourceMode) {
       case _SourceMode.topic:
@@ -164,6 +364,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
           description: _descriptionController.text,
           maxCards: _quantity,
           generateImages: _generateImages,
+          availableTags: tags,
         );
       case _SourceMode.text:
         if (_textController.text.trim().isEmpty) {
@@ -178,11 +379,12 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
           topic: topic,
           maxCards: _quantity,
           generateImages: _generateImages,
+          availableTags: tags,
         );
       case _SourceMode.pdf:
         if (_pdfBytes == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Selecione um PDF primeiro')),
+            const SnackBar(content: Text('Selecione um documento primeiro')),
           );
           return;
         }
@@ -193,6 +395,9 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
           topic: topic,
           maxCards: _quantity,
           generateImages: _generateImages,
+          additionalInstructions: _pdfInstructionsController.text,
+          isPptx: _isPptx,
+          availableTags: tags,
         );
     }
   }
@@ -201,13 +406,15 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   Future<void> _pickPdf() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf'],
+      allowedExtensions: ['pdf', 'pptx'],
       withData: true,
     );
     if (result != null && result.files.first.bytes != null) {
+      final file = result.files.first;
       setState(() {
-        _pdfBytes = result.files.first.bytes;
-        _pdfName = result.files.first.name;
+        _pdfBytes = file.bytes;
+        _pdfName = file.name;
+        _isPptx = file.extension?.toLowerCase() == 'pptx';
       });
     }
   }
@@ -289,8 +496,10 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
             ] else ...[
               _buildSourceSection(theme, colorScheme, isDark),
               const SizedBox(height: 20),
-              _buildTopicSection(theme, colorScheme, isDark),
-              const SizedBox(height: 20),
+              if (_sourceMode != _SourceMode.pdf) ...[
+                _buildTopicSection(theme, colorScheme, isDark),
+                const SizedBox(height: 20),
+              ],
               _buildQuantitySection(theme, colorScheme, isDark),
               const SizedBox(height: 20),
               _buildImageToggle(theme, colorScheme, isDark),
@@ -428,6 +637,11 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+
+          // Tag selector (same style as AI topic chips)
+          _buildManualTagSection(theme, colorScheme, isDark),
+
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -448,15 +662,201 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
     );
   }
 
+  // ─── Manual tag selector (single select, same style as AI topics) ──
+  Widget _buildManualTagSection(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    bool isDark,
+  ) {
+    final topics = ref.watch(allTagsProvider);
+    final tagNotifier = ref.read(allTagsProvider.notifier);
+
+    final chipColors = [
+      const Color(0xFFF8BBD0),
+      const Color(0xFFFFCCBC),
+      const Color(0xFFFFF9C4),
+      const Color(0xFFC8E6C9),
+      const Color(0xFFBBDEFB),
+      const Color(0xFFD1C4E9),
+      const Color(0xFFE1BEE7),
+      const Color(0xFFB2DFDB),
+    ];
+    final darkChipColors = [
+      const Color(0xFF880E4F),
+      const Color(0xFFBF360C),
+      const Color(0xFFF9A825),
+      const Color(0xFF2E7D32),
+      const Color(0xFF1565C0),
+      const Color(0xFF4527A0),
+      const Color(0xFF6A1B9A),
+      const Color(0xFF00695C),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () =>
+              setState(() => _manualTagExpanded = !_manualTagExpanded),
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            children: [
+              Icon(Icons.label_rounded,
+                  size: 20, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Tag do card',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (!_manualTagExpanded && _manualSelectedTag != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _manualSelectedTag!,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              if (!_manualTagExpanded && _manualSelectedTag == null)
+                Text('Nenhuma',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    )),
+              const SizedBox(width: 4),
+              AnimatedRotation(
+                turns: _manualTagExpanded ? 0 : -0.25,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.expand_more_rounded,
+                  size: 22,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        AnimatedCrossFade(
+          firstChild: Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 1,
+              children: [
+                ...List.generate(topics.length, (i) {
+                  final topic = topics[i];
+                  final isSelected = _manualSelectedTag == topic;
+                  final tagColorVal = tagNotifier.getTagColor(topic);
+                  final Color chipColor;
+                  if (tagColorVal != null) {
+                    chipColor = Color(tagColorVal);
+                  } else {
+                    chipColor = isDark
+                        ? darkChipColors[i % darkChipColors.length]
+                        : chipColors[i % chipColors.length];
+                  }
+                  final bgColor = chipColor.withValues(
+                      alpha: isSelected
+                          ? (isDark ? 0.6 : 1.0)
+                          : (isDark ? 0.2 : 0.3));
+                  final fgColor = isDark
+                      ? (isSelected
+                          ? Colors.white
+                          : colorScheme.onSurface)
+                      : (isSelected
+                          ? Colors.black87
+                          : colorScheme.onSurface
+                              .withValues(alpha: 0.8));
+
+                  return GestureDetector(
+                    onLongPress: () => _handleTagLongPress(topic),
+                    child: FilterChip(
+                      label: Text(topic),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          _manualSelectedTag = selected ? topic : null;
+                        });
+                      },
+                      backgroundColor: bgColor,
+                      selectedColor: bgColor,
+                      labelStyle: TextStyle(
+                        color: fgColor,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                      checkmarkColor: fgColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: isSelected
+                              ? colorScheme.primary
+                                  .withValues(alpha: 0.3)
+                              : Colors.transparent,
+                        ),
+                      ),
+                      showCheckmark: isSelected,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                    ),
+                  );
+                }),
+                ActionChip(
+                  avatar: Icon(Icons.add_rounded,
+                      size: 18, color: colorScheme.primary),
+                  label: const Text('Outro'),
+                  onPressed: () => _showCreateTagModal(context),
+                  backgroundColor:
+                      colorScheme.surfaceContainerHighest,
+                  labelStyle: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: colorScheme.outlineVariant
+                          .withValues(alpha: 0.4),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 2),
+                ),
+              ],
+            ),
+          ),
+          secondChild: const SizedBox.shrink(),
+          crossFadeState: _manualTagExpanded
+              ? CrossFadeState.showFirst
+              : CrossFadeState.showSecond,
+          duration: const Duration(milliseconds: 250),
+          sizeCurve: Curves.easeOutCubic,
+        ),
+      ],
+    );
+  }
+
   // ─── Topic chips section (collapsible) ────────────────────
   Widget _buildTopicSection(
     ThemeData theme,
     ColorScheme colorScheme,
     bool isDark,
   ) {
-    const topics = OpenAIConstants.predefinedTopics;
+    final topics = ref.watch(allTagsProvider);
 
-    // Pastel chip colors that rotate
+    // Fallback pastel chip colors for tags without DB color
     final chipColors = [
       const Color(0xFFF8BBD0), // pink
       const Color(0xFFFFCCBC), // peach
@@ -480,7 +880,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
     ];
 
     final resolvedTopic = _resolveTopic();
-    final hasSelection = _selectedTopic != null || (_showCustomTopic && _customTopicController.text.trim().isNotEmpty);
+    final hasSelection = _selectedTopics.isNotEmpty;
 
     return _SectionContainer(
       colorScheme: colorScheme,
@@ -505,19 +905,24 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                     ),
                   ),
                 ),
-                // Show selected topic label when collapsed
+                // Show selected topic labels when collapsed
                 if (!_topicExpanded && hasSelection)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      resolvedTopic,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _selectedTopics.length > 2
+                            ? '${_selectedTopics.length} assuntos'
+                            : resolvedTopic,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -544,29 +949,42 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                 children: [
                   Wrap(
                     spacing: 8,
-                    runSpacing: 8,
+                    runSpacing: 1,
                     children: [
                       ...List.generate(topics.length, (i) {
                         final topic = topics[i];
-                        final isSelected = _selectedTopic == topic;
-                        final bgColor = isDark
-                            ? darkChipColors[i % darkChipColors.length]
-                                .withValues(alpha: isSelected ? 0.6 : 0.2)
-                            : chipColors[i % chipColors.length]
-                                .withValues(alpha: isSelected ? 1.0 : 0.5);
+                        final isSelected = _selectedTopics.contains(topic);
+                        // Use tag color from DB if available, else fallback to pastel rotation
+                        final tagNotifier = ref.read(allTagsProvider.notifier);
+                        final tagColorVal = tagNotifier.getTagColor(topic);
+                        final Color chipColor;
+                        if (tagColorVal != null) {
+                          chipColor = Color(tagColorVal);
+                        } else {
+                          chipColor = isDark
+                              ? darkChipColors[i % darkChipColors.length]
+                              : chipColors[i % chipColors.length];
+                        }
+                        final bgColor = chipColor.withValues(
+                            alpha: isSelected ? (isDark ? 0.6 : 1.0) : (isDark ? 0.2 : 0.3));
                         final fgColor = isDark
                             ? (isSelected ? Colors.white : colorScheme.onSurface)
                             : (isSelected
                                 ? Colors.black87
                                 : colorScheme.onSurface.withValues(alpha: 0.8));
 
-                        return FilterChip(
+                        return GestureDetector(
+                          onLongPress: () => _handleTagLongPress(topic),
+                          child: FilterChip(
                           label: Text(topic),
                           selected: isSelected,
                           onSelected: (selected) {
                             setState(() {
-                              _selectedTopic = selected ? topic : null;
-                              if (selected) _showCustomTopic = false;
+                              if (selected) {
+                                _selectedTopics.add(topic);
+                              } else {
+                                _selectedTopics.remove(topic);
+                              }
                             });
                           },
                           backgroundColor: bgColor,
@@ -588,58 +1006,30 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                           showCheckmark: isSelected,
                           padding:
                               const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          ),
                         );
                       }),
-                      // "+ Outro" chip
-                      FilterChip(
-                        label: const Text('+ Outro'),
-                        selected: _showCustomTopic,
-                        onSelected: (selected) {
-                          setState(() {
-                            _showCustomTopic = selected;
-                            if (selected) _selectedTopic = null;
-                          });
-                        },
+                      // "+ Outro" chip — opens tag creator modal
+                      ActionChip(
+                        avatar: Icon(Icons.add_rounded,
+                            size: 18, color: colorScheme.primary),
+                        label: const Text('Outro'),
+                        onPressed: () => _showCreateTagModal(context),
                         backgroundColor: colorScheme.surfaceContainerHighest,
-                        selectedColor:
-                            colorScheme.primaryContainer.withValues(alpha: 0.6),
                         labelStyle: TextStyle(
-                          color: _showCustomTopic
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                          fontWeight:
-                              _showCustomTopic ? FontWeight.w600 : FontWeight.normal,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                           side: BorderSide(
-                            color: _showCustomTopic
-                                ? colorScheme.primary.withValues(alpha: 0.3)
-                                : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
                           ),
                         ),
-                        showCheckmark: false,
                         padding:
                             const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       ),
                     ],
                   ),
-                  // Custom topic text field
-                  if (_showCustomTopic) ...[
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _customTopicController,
-                      decoration: InputDecoration(
-                        labelText: 'Assunto personalizado',
-                        hintText: 'Ex: culinaria japonesa, astronomia...',
-                        prefixIcon: const Icon(Icons.edit_rounded),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -766,8 +1156,8 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                 colorScheme: colorScheme,
               ),
               _sourceChoiceChip(
-                label: 'PDF',
-                icon: Icons.picture_as_pdf_rounded,
+                label: 'Documento',
+                icon: Icons.description_rounded,
                 mode: _SourceMode.pdf,
                 colorScheme: colorScheme,
               ),
@@ -804,7 +1194,9 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                   ? colorScheme.onPrimaryContainer
                   : colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
-          Text(label),
+          Text(label,
+          style: const TextStyle(fontSize: 12), // diminui aqui
+        ),
         ],
       ),
       selected: isSelected,
@@ -877,7 +1269,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                     value: PdfParseMode.lineByLine,
                     title: const Text('Pares prontos'),
                     subtitle: const Text(
-                      'A IA identifica pares bilíngues já existentes no PDF',
+                      'A IA identifica pares bilíngues já existentes no documento',
                     ),
                     contentPadding: EdgeInsets.zero,
                     shape: RoundedRectangleBorder(
@@ -896,13 +1288,41 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
                 ],
               ),
             ),
+
+            // Additional instructions (only for AI-interpreted mode)
+            if (_parseMode == PdfParseMode.aiInterpreted) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _pdfInstructionsController,
+                maxLines: 3,
+                minLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Instrucoes para a IA (opcional)',
+                  hintText: 'Ex: Crie cards com perguntas em ingles e respostas em portugues...',
+                  alignLabelWithHint: true,
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(bottom: 40),
+                    child: Icon(Icons.psychology_rounded),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  helperText: 'Se vazio, a IA segue pelo contexto do documento',
+                  helperMaxLines: 2,
+                ),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+            ],
+
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _pickPdf,
-                icon: const Icon(Icons.upload_file_rounded),
-                label: Text(_pdfName ?? 'Selecionar PDF'),
+                icon: Icon(_isPptx
+                    ? Icons.slideshow_rounded
+                    : Icons.upload_file_rounded),
+                label: Text(_pdfName ?? 'Selecionar documento'),
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),

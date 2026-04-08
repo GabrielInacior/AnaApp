@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 enum PdfParseMode {
@@ -18,6 +19,34 @@ class PdfParser {
     final text = extractor.extractText();
     document.dispose();
     return text;
+  }
+
+  /// Extrai texto de um PPTX (ZIP com XMLs de slides)
+  static String extractTextFromPptx(Uint8List pptxBytes) {
+    final archive = ZipDecoder().decodeBytes(pptxBytes);
+    final buffer = StringBuffer();
+
+    // Slides are in ppt/slides/slide1.xml, slide2.xml, etc.
+    final slideFiles = archive.files
+        .where((f) =>
+            f.name.startsWith('ppt/slides/slide') && f.name.endsWith('.xml'))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
+    for (final file in slideFiles) {
+      final content = String.fromCharCodes(file.content as List<int>);
+      // Extract text between <a:t> tags (PowerPoint text runs)
+      final matches = RegExp(r'<a:t>([^<]+)</a:t>').allMatches(content);
+      for (final match in matches) {
+        final text = match.group(1)?.trim() ?? '';
+        if (text.isNotEmpty) {
+          buffer.writeln(text);
+        }
+      }
+      buffer.writeln(); // blank line between slides
+    }
+
+    return buffer.toString();
   }
 
   /// Modo lineByLine: limpa ruído e retorna texto para a IA extrair pares

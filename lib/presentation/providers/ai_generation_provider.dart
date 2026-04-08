@@ -16,6 +16,7 @@ import 'deck_provider.dart';
 class AIGenerationState {
   final bool isLoading;
   final bool isGeneratingImages;
+  final bool isAutoTagging;
   final List<Flashcard> generatedCards;
   final String? error;
   final int imagesGenerated;
@@ -26,6 +27,7 @@ class AIGenerationState {
   const AIGenerationState({
     this.isLoading = false,
     this.isGeneratingImages = false,
+    this.isAutoTagging = false,
     this.generatedCards = const [],
     this.error,
     this.imagesGenerated = 0,
@@ -34,7 +36,7 @@ class AIGenerationState {
     this.generatingForDeckId,
   });
 
-  bool get isBusy => isLoading || isGeneratingImages;
+  bool get isBusy => isLoading || isGeneratingImages || isAutoTagging;
 }
 
 final aiGenerationProvider =
@@ -51,8 +53,9 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
     String? description,
     int maxCards = 20,
     bool generateImages = false,
+    List<String> availableTags = const [],
   }) async {
-    state = const AIGenerationState(isLoading: true);
+    state = AIGenerationState(isLoading: true, generatingForDeckId: deckId);
     try {
       final input = description != null && description.trim().isNotEmpty
           ? '$topic: ${description.trim()}'
@@ -63,6 +66,7 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
             inputType: AIInputType.topic,
             topic: topic,
             maxCards: maxCards,
+            availableTags: availableTags,
           );
       state = AIGenerationState(generatedCards: cards);
       _ref.invalidate(deckProvider);
@@ -83,8 +87,9 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
     required String topic,
     int maxCards = 20,
     bool generateImages = false,
+    List<String> availableTags = const [],
   }) async {
-    state = const AIGenerationState(isLoading: true);
+    state = AIGenerationState(isLoading: true, generatingForDeckId: deckId);
     try {
       final cards = await _ref.read(generateCardsUseCaseProvider).execute(
             deckId: deckId,
@@ -92,6 +97,7 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
             inputType: AIInputType.text,
             topic: topic,
             maxCards: maxCards,
+            availableTags: availableTags,
           );
       state = AIGenerationState(generatedCards: cards);
       _ref.invalidate(deckProvider);
@@ -113,10 +119,15 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
     required String topic,
     int maxCards = 20,
     bool generateImages = false,
+    String? additionalInstructions,
+    bool isPptx = false,
+    List<String> availableTags = const [],
   }) async {
-    state = const AIGenerationState(isLoading: true);
+    state = AIGenerationState(isLoading: true, generatingForDeckId: deckId);
     try {
-      final rawText = PdfParser.extractRawText(pdfBytes);
+      final rawText = isPptx
+          ? PdfParser.extractTextFromPptx(pdfBytes)
+          : PdfParser.extractRawText(pdfBytes);
       final useCase = _ref.read(generateCardsUseCaseProvider);
       List<Flashcard> cards;
 
@@ -128,6 +139,7 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
           inputType: AIInputType.pdfLineByLine,
           topic: topic,
           maxCards: maxCards,
+          availableTags: availableTags,
         );
       } else {
         final text = PdfParser.prepareTextForAI(rawText);
@@ -137,6 +149,8 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
           inputType: AIInputType.pdfAI,
           topic: topic,
           maxCards: maxCards,
+          additionalInstructions: additionalInstructions,
+          availableTags: availableTags,
         );
       }
 
@@ -211,6 +225,72 @@ class AIGenerationNotifier extends StateNotifier<AIGenerationState> {
     }
 
     _ref.invalidate(deckProvider);
+  }
+
+  /// Auto-tag untagged cards in a deck using AI
+  Future<int> autoTagCards({
+    required String deckId,
+    required List<Flashcard> untaggedCards,
+    required List<String> availableTags,
+  }) async {
+    if (untaggedCards.isEmpty || availableTags.isEmpty) return 0;
+
+    state = AIGenerationState(
+      isAutoTagging: true,
+      generatingForDeckId: deckId,
+    );
+
+    try {
+      final secureStorage = _ref.read(secureStorageProvider);
+      final apiKey =
+          await secureStorage.read(key: AppConstants.apiKeyStorageKey);
+      if (apiKey == null || apiKey.isEmpty) {
+        throw const AIFailure('Chave de API não configurada.');
+      }
+
+      final openAIClient = _ref.read(openAIClientProvider);
+      final flashcardRepo = _ref.read(flashcardRepositoryProvider);
+
+      // Send cards in batches of 50 to avoid token limits
+      const batchSize = 50;
+      int totalTagged = 0;
+
+      for (int i = 0; i < untaggedCards.length; i += batchSize) {
+        if (!mounted) break;
+
+        final batch = untaggedCards.skip(i).take(batchSize).toList();
+        final cardMaps = batch
+            .map((c) => {'id': c.id, 'front': c.front, 'back': c.back})
+            .toList();
+
+        final tagAssignments = await openAIClient.assignTags(
+          apiKey: apiKey,
+          cards: cardMaps,
+          availableTags: availableTags,
+        );
+
+        // Update each card with the assigned tag
+        for (final card in batch) {
+          final assignedTag = tagAssignments[card.id];
+          if (assignedTag != null) {
+            await flashcardRepo.updateCard(card.copyWith(tag: assignedTag));
+            totalTagged++;
+          }
+        }
+      }
+
+      state = const AIGenerationState();
+      _ref.invalidate(cardsByDeckProvider);
+      _ref.invalidate(deckProvider);
+      return totalTagged;
+    } catch (e) {
+      state = AIGenerationState(
+        error: e is Failure
+            ? e.message
+            : e.toString().replaceAll('Exception: ', ''),
+      );
+      return 0;
+    }
   }
 
   void reset() => state = const AIGenerationState();

@@ -202,6 +202,7 @@ class ReviewSessionNotifier extends StateNotifier<ReviewSessionState> {
       isFlipped: false,
     );
     _ref.invalidate(deckProvider);
+    _ref.invalidate(cardsByDeckProvider);
     _ref.invalidate(statsProvider);
     _ref.invalidate(todayReviewCountProvider);
   }

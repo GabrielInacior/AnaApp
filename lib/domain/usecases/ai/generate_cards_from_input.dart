@@ -32,6 +32,8 @@ class GenerateCardsFromInput {
     required AIInputType inputType,
     required String topic,
     int maxCards = 20,
+    String? additionalInstructions,
+    List<String> availableTags = const [],
   }) async {
     final apiKey = await _secureStorage.read(key: AppConstants.apiKeyStorageKey);
     if (apiKey == null || apiKey.isEmpty) {
@@ -45,8 +47,12 @@ class GenerateCardsFromInput {
         prompt = 'Gere $maxCards flashcards sobre: "$input"';
       case AIInputType.text:
       case AIInputType.pdfAI:
+        final instructions = additionalInstructions != null &&
+                additionalInstructions.trim().isNotEmpty
+            ? '\n\nInstruções adicionais do usuário: ${additionalInstructions.trim()}'
+            : '';
         prompt =
-            'Extraia e gere até $maxCards flashcards a partir deste texto:\n\n$input';
+            'Extraia e gere até $maxCards flashcards a partir deste texto:\n\n$input$instructions';
       case AIInputType.pdfLineByLine:
         prompt =
             'Este documento contém pares bilíngues já prontos (frases em um idioma seguidas da tradução em outro). '
@@ -61,6 +67,10 @@ class GenerateCardsFromInput {
       topic: topic,
       maxCards: maxCards,
       isPdfLineByLine: inputType == AIInputType.pdfLineByLine,
+      additionalInstructions: inputType == AIInputType.pdfAI
+          ? additionalInstructions
+          : null,
+      availableTags: availableTags,
     );
 
     final now = DateTime.now();
@@ -73,6 +83,7 @@ class GenerateCardsFromInput {
               createdAt: now,
               dueDate: now,
               easeFactor: AnkiScheduler.initialEaseFactor,
+              tag: g.tag,
             ))
         .toList();
 

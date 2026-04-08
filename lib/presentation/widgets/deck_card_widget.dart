@@ -1,9 +1,11 @@
 // lib/presentation/widgets/deck_card_widget.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../domain/entities/deck.dart';
+import '../providers/repository_providers.dart';
 
-class DeckCardWidget extends StatelessWidget {
+class DeckCardWidget extends ConsumerWidget {
   final Deck deck;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
@@ -20,13 +22,28 @@ class DeckCardWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final deckColor = AppColors.getDeckColor(
       deck.colorValue,
       brightness: theme.brightness,
     );
+
+    // Derive tags from cards inside this deck
+    final cardsAsync = ref.watch(cardsByDeckProvider(deck.id));
+    // Watch allTagsProvider so widget rebuilds when tag colors load from DB
+    ref.watch(allTagsProvider);
+    final tagNotifier = ref.read(allTagsProvider.notifier);
+    final cardTags = cardsAsync.whenOrNull(
+      data: (cards) {
+        final tags = <String>{};
+        for (final c in cards) {
+          if (c.tag != null && c.tag!.isNotEmpty) tags.add(c.tag!);
+        }
+        return tags.toList()..sort();
+      },
+    ) ?? <String>[];
 
     return Card(
       elevation: 0,
@@ -114,30 +131,55 @@ class DeckCardWidget extends StatelessWidget {
                   ),
                 ],
 
-                // Tag badges
-                if (deck.tags.isNotEmpty) ...[
+                // Tag badges (derived from cards)
+                if (cardTags.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.only(left: 52),
                     child: Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      children: deck.tags.take(3).map((tag) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: deckColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          tag,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: deckColor,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 10,
+                      children: [
+                        ...cardTags.take(4).map((tag) {
+                          final tagColorVal = tagNotifier.getTagColor(tag);
+                          final badgeColor = tagColorVal != null
+                              ? Color(tagColorVal)
+                              : deckColor;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: badgeColor.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              tag,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: badgeColor,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 10,
+                              ),
+                            ),
+                          );
+                        }),
+                        if (cardTags.length > 4)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '+${cardTags.length - 4}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 10,
+                              ),
+                            ),
                           ),
-                        ),
-                      )).toList(),
+                      ],
                     ),
                   ),
                 ],

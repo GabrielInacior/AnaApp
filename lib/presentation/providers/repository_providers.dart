@@ -1,11 +1,13 @@
 // lib/presentation/providers/repository_providers.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../core/theme/app_colors.dart';
 import '../../data/datasources/local/database_helper.dart';
 import '../../data/datasources/local/deck_dao.dart';
 import '../../data/datasources/local/deck_config_dao.dart';
 import '../../data/datasources/local/flashcard_dao.dart';
 import '../../data/datasources/local/review_dao.dart';
+import '../../data/datasources/local/tag_dao.dart';
 import '../../data/datasources/local/user_dao.dart';
 import '../../data/datasources/remote/openai_client.dart';
 import '../../data/repositories/deck_repository_impl.dart';
@@ -46,6 +48,8 @@ final userDaoProvider =
     Provider<UserDAO>((ref) => UserDAO(ref.read(dbHelperProvider)));
 final deckConfigDaoProvider =
     Provider<DeckConfigDAO>((ref) => DeckConfigDAO(ref.read(dbHelperProvider)));
+final tagDaoProvider =
+    Provider<TagDAO>((ref) => TagDAO(ref.read(dbHelperProvider)));
 
 // Repositories
 final deckRepositoryProvider = Provider<DeckRepository>((ref) =>
@@ -115,3 +119,60 @@ final deckConfigProvider =
     FutureProvider.family<DeckConfig, String>((ref, deckId) {
   return ref.read(deckConfigDaoProvider).getConfig(deckId);
 });
+
+// All available tags (predefined + custom, DB-backed)
+final allTagsProvider = StateNotifierProvider<AllTagsNotifier, List<String>>(
+    (ref) => AllTagsNotifier(ref.read(tagDaoProvider)));
+
+class AllTagsNotifier extends StateNotifier<List<String>> {
+  final TagDAO _tagDao;
+  final Map<String, int> _tagColors = {};
+  bool _seeded = false;
+
+  AllTagsNotifier(this._tagDao) : super([...AppColors.predefinedTags]) {
+    _init();
+  }
+
+  Map<String, int> get tagColors => Map.unmodifiable(_tagColors);
+
+  Future<void> _init() async {
+    if (!_seeded) {
+      await _tagDao.seedPredefinedTags();
+      _seeded = true;
+    }
+    await _reload();
+  }
+
+  Future<void> _reload() async {
+    final records = await _tagDao.getAllTags();
+    final names = <String>[];
+    _tagColors.clear();
+    for (final r in records) {
+      names.add(r.name);
+      _tagColors[r.name] = r.colorValue;
+    }
+    state = names;
+  }
+
+  Future<void> addTag(String tag, {int? colorValue}) async {
+    final trimmed = tag.trim();
+    if (trimmed.isEmpty || state.contains(trimmed)) return;
+    final color = colorValue ?? 0xFF90A4AE;
+    await _tagDao.insertTag(trimmed, color);
+    await _reload();
+  }
+
+  Future<int> countCardsWithTag(String tag) async {
+    return _tagDao.countCardsWithTag(tag);
+  }
+
+  Future<void> deleteTag(String tag, {bool clearFromCards = false}) async {
+    if (clearFromCards) {
+      await _tagDao.clearTagFromCards(tag);
+    }
+    await _tagDao.deleteTag(tag);
+    await _reload();
+  }
+
+  int? getTagColor(String tag) => _tagColors[tag];
+}

@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -67,6 +67,7 @@ class DatabaseHelper {
         lapses INTEGER NOT NULL DEFAULT 0,
         remaining_steps INTEGER NOT NULL DEFAULT 0,
         pending_image INTEGER NOT NULL DEFAULT 0,
+        tag TEXT,
         FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
       )
     ''');
@@ -87,6 +88,14 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_cards_queue ON flashcards(queue)');
     await db.execute('CREATE INDEX idx_cards_type ON flashcards(card_type)');
     await db.execute('CREATE INDEX idx_logs_date ON review_logs(reviewed_at)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tags (
+        name TEXT PRIMARY KEY,
+        color_value INTEGER NOT NULL,
+        is_predefined INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS deck_config (
@@ -151,6 +160,18 @@ class DatabaseHelper {
     }
     if (oldVersion < 4) {
       await db.execute('ALTER TABLE flashcards ADD COLUMN pending_image INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE flashcards ADD COLUMN tag TEXT');
+    }
+    if (oldVersion < 6) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS tags (
+          name TEXT PRIMARY KEY,
+          color_value INTEGER NOT NULL,
+          is_predefined INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
     }
   }
 }

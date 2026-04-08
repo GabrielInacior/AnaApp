@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/sm2.dart';
+import '../../providers/repository_providers.dart';
 import '../../providers/review_session_provider.dart';
 import '../../widgets/flashcard_flip_widget.dart';
 import '../../widgets/rating_buttons_widget.dart';
@@ -79,6 +80,12 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // Resolve tag color
+    ref.watch(allTagsProvider);
+    final tagNotifier = ref.read(allTagsProvider.notifier);
+    final tagColorValue = card.tag != null ? tagNotifier.getTagColor(card.tag!) : null;
+    final tagColor = tagColorValue != null ? Color(tagColorValue) : null;
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -137,6 +144,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                 onTap: session.isFlipped ? () {} : notifier.flipCard,
                 frontImagePath: card.frontImagePath,
                 backImagePath: card.backImagePath,
+                tag: card.tag,
+                tagColor: tagColor,
               ),
             ),
             const SizedBox(height: 20),

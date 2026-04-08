@@ -295,10 +295,14 @@ class _DashboardTabState extends ConsumerState<_DashboardTab>
             color: colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Icon(
-            Icons.local_florist_rounded,
-            color: colorScheme.onPrimaryContainer,
-            size: 24,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.asset(
+              'assets/images/AnaAppLogo.png',
+              width: 48,
+              height: 48,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
       ],
@@ -332,7 +336,9 @@ class _DashboardTabState extends ConsumerState<_DashboardTab>
                     page: ReviewScreen(
                       deckId: deck.id, deckName: deck.name),
                   ),
-                );
+                ).then((_) {
+                  ref.invalidate(deckProvider);
+                });
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(

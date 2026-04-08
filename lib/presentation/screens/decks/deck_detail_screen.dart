@@ -11,6 +11,7 @@ import '../../providers/ai_generation_provider.dart';
 import '../../providers/deck_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/tag_picker.dart';
 import '../ai_generate/ai_generate_screen.dart';
 import '../review/review_screen.dart';
 
@@ -26,6 +27,7 @@ class DeckDetailScreen extends ConsumerStatefulWidget {
 class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
     with SingleTickerProviderStateMixin {
   String _searchQuery = '';
+  String? _selectedTag;
   final _searchController = TextEditingController();
   late final AnimationController _animController;
   late final Animation<double> _headerOpacity;
@@ -81,13 +83,52 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
     final aiState = ref.watch(aiGenerationProvider);
     final isGeneratingForThis = aiState.isGeneratingImages &&
         aiState.generatingForDeckId == widget.deck.id;
+    final isLoadingForThis = aiState.isLoading &&
+        aiState.generatingForDeckId == widget.deck.id;
+    final isAutoTaggingForThis = aiState.isAutoTagging &&
+        aiState.generatingForDeckId == widget.deck.id;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final deckColor = AppColors.getDeckColor(
+      currentDeck.colorValue,
+      brightness: theme.brightness,
+    );
+
+    // Compute untagged cards for AppBar icon
+    final knownTags = ref.watch(allTagsProvider);
+    final allCards = cardsAsync.whenOrNull(data: (cards) => cards) ?? [];
+    final untaggedCards = allCards.where((c) =>
+        c.tag == null || c.tag!.isEmpty || !knownTags.contains(c.tag)).toList();
+    final hasUntagged = untaggedCards.isNotEmpty && allCards.isNotEmpty;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(currentDeck.name),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         actions: [
+          if (isAutoTaggingForThis)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            IconButton(
+              onPressed: hasUntagged && !aiState.isBusy
+                  ? () => _autoTagCards(untaggedCards, knownTags, widget.deck.id)
+                  : null,
+              icon: const Icon(Icons.auto_fix_high_rounded),
+              tooltip: hasUntagged
+                  ? 'Gerar tags para ${untaggedCards.length} card${untaggedCards.length > 1 ? 's' : ''}'
+                  : 'Todos os cards possuem tags',
+            ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'edit') {
@@ -118,7 +159,7 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (cardList) {
-          if (cardList.isEmpty) {
+          if (cardList.isEmpty && !isLoadingForThis) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -148,9 +189,69 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
             );
           }
 
-          final now = DateTime.now();
-          final dueCount =
-              cardList.where((c) => !c.dueDate.isAfter(now)).length;
+          // Show skeletons when generating and list is empty
+          if (cardList.isEmpty && isLoadingForThis) {
+            return Column(
+              children: [
+                SizedBox(height: MediaQuery.of(context).padding.top + kToolbarHeight),
+                // Loading banner at top
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: colorScheme.primary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Gerando cards com IA...',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Skeleton cards
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 96, top: 4),
+                    itemCount: 5,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                    ),
+                    itemBuilder: (context, index) => _SkeletonCard(
+                      colorScheme: colorScheme,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final dueCount = currentDeck.dueCards;
           final pendingCount =
               cardList.where((c) => c.pendingImage).length;
 
@@ -163,12 +264,24 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                   position: _headerSlide,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: theme.scaffoldBackgroundColor,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          deckColor.withValues(alpha: isDark ? 0.22 : 0.16),
+                          deckColor.withValues(alpha: isDark ? 0.10 : 0.07),
+                          deckColor.withValues(alpha: 0.0),
+                        ],
+                        stops: const [0.0, 0.55, 1.0],
+                      ),
                       border: Border(
                         bottom: BorderSide(
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.2),
+                          color: deckColor.withValues(alpha: isDark ? 0.15 : 0.18),
                         ),
                       ),
+                    ),
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top + kToolbarHeight,
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -206,7 +319,10 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                                         deckName: currentDeck.name,
                                       ),
                                     ),
-                                  ),
+                                  ).then((_) {
+                                    ref.invalidate(cardsByDeckProvider);
+                                    ref.invalidate(deckProvider);
+                                  }),
                                   icon: const Icon(Icons.play_arrow_rounded, size: 18),
                                   label: const Text('Revisar'),
                                   style: FilledButton.styleFrom(
@@ -222,6 +338,45 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                             ],
                           ),
                         ),
+
+                        // AI text generation in progress banner
+                        if (isLoadingForThis)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: colorScheme.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Gerando cards com IA...',
+                                      style: theme.textTheme.labelMedium?.copyWith(
+                                        color: colorScheme.onPrimaryContainer,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
 
                         // Image generation progress banner
                         if (isGeneratingForThis || pendingCount > 0)
@@ -325,7 +480,7 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
               Expanded(
                 child: Builder(builder: (context) {
                   final query = _searchQuery.toLowerCase();
-                  final filteredList = query.isEmpty
+                  var filteredList = query.isEmpty
                       ? cardList
                       : cardList
                           .where((c) =>
@@ -333,7 +488,23 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                               c.back.toLowerCase().contains(query))
                           .toList();
 
-                  if (filteredList.isEmpty) {
+                  // Collect all tags in this deck's cards
+                  final allCardTags = <String>{};
+                  for (final c in cardList) {
+                    if (c.tag != null && c.tag!.isNotEmpty) {
+                      allCardTags.add(c.tag!);
+                    }
+                  }
+                  final sortedTags = allCardTags.toList()..sort();
+
+                  // Apply tag filter
+                  if (_selectedTag != null) {
+                    filteredList = filteredList
+                        .where((c) => c.tag == _selectedTag)
+                        .toList();
+                  }
+
+                  if (filteredList.isEmpty && query.isEmpty && _selectedTag == null) {
                     return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -354,41 +525,87 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                     );
                   }
 
-                  return ListView.separated(
-                    key: ValueKey('cards-${filteredList.length}-$query'),
-                    padding: const EdgeInsets.only(bottom: 96, top: 4),
-                    itemCount: filteredList.length,
-                    separatorBuilder: (_, __) => Divider(
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
-                      color: colorScheme.outlineVariant
-                          .withValues(alpha: 0.3),
-                    ),
-                    itemBuilder: (context, index) {
-                      final card = filteredList[index];
-                      final isPending = card.pendingImage ||
-                          aiState.pendingImageCardIds.contains(card.id);
-                      return _AnimatedCardItem(
-                        key: ValueKey(card.id),
-                        index: index,
-                        child: _CardListItem(
-                          card: card,
-                          isPendingImage: isPending,
-                          onTap: () => _showEditCardSheet(context, card),
-                          onDelete: () async {
-                            final confirmed =
-                                await _confirmDelete(context);
-                            if (!confirmed) return;
-                            await ref
-                                .read(flashcardRepositoryProvider)
-                                .deleteCard(card.id);
-                            ref.invalidate(cardsByDeckProvider);
-                            ref.invalidate(deckProvider);
-                          },
+                  // Build grouped or flat list
+                  final showGroups = _selectedTag == null &&
+                      query.isEmpty &&
+                      sortedTags.length > 1;
+
+                  return Column(
+                    children: [
+                      // Tag filter chips
+                      if (sortedTags.isNotEmpty)
+                        SizedBox(
+                          height: 42,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  label: const Text('Todas'),
+                                  selected: _selectedTag == null,
+                                  onSelected: (_) =>
+                                      setState(() => _selectedTag = null),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(20)),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              ...sortedTags.map((tag) {
+                                    final tagColorVal = ref.read(allTagsProvider.notifier).getTagColor(tag);
+                                    final rawColor = tagColorVal != null
+                                        ? Color(tagColorVal)
+                                        : colorScheme.primary;
+                                    // Ensure readable contrast on light mode
+                                    final chipColor = isDark
+                                        ? rawColor
+                                        : _ensureLightContrast(rawColor);
+                                    final isSelected = _selectedTag == tag;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: FilterChip(
+                                        label: Text(
+                                          tag,
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? chipColor
+                                                : chipColor.withValues(alpha: 0.85),
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
+                                          ),
+                                        ),
+                                        selected: isSelected,
+                                        onSelected: (v) => setState(() =>
+                                            _selectedTag = v ? tag : null),
+                                        backgroundColor: chipColor.withValues(alpha: 0.10),
+                                        selectedColor: chipColor.withValues(alpha: 0.20),
+                                        checkmarkColor: chipColor,
+                                        side: BorderSide(
+                                          color: isSelected
+                                              ? chipColor.withValues(alpha: 0.5)
+                                              : chipColor.withValues(alpha: 0.25),
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(20)),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    );
+                                  }),
+                            ],
+                          ),
                         ),
-                      );
-                    },
+
+                      Expanded(
+                        child: showGroups
+                            ? _buildGroupedList(
+                                filteredList, sortedTags, aiState)
+                            : _buildFlatList(filteredList, aiState, query),
+                      ),
+                    ],
                   );
                 }),
               ),
@@ -396,6 +613,149 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildFlatList(
+      List<Flashcard> cards, AIGenerationState aiState, String query) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isGenerating = aiState.isLoading &&
+        aiState.generatingForDeckId == widget.deck.id;
+
+    if (cards.isEmpty && !isGenerating) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off_rounded,
+                size: 40,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+            const SizedBox(height: 12),
+            Text(
+              'Nenhum card encontrado',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final skeletonCount = isGenerating ? 3 : 0;
+    final totalItems = cards.length + skeletonCount;
+
+    return ListView.separated(
+      key: ValueKey('cards-${cards.length}-$query-$isGenerating'),
+      padding: const EdgeInsets.only(bottom: 96, top: 4),
+      itemCount: totalItems,
+      separatorBuilder: (_, __) => Divider(
+        height: 1,
+        indent: 16,
+        endIndent: 16,
+        color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+      ),
+      itemBuilder: (context, index) {
+        // Skeleton placeholders at end
+        if (index >= cards.length) {
+          return _SkeletonCard(colorScheme: colorScheme);
+        }
+
+        final card = cards[index];
+        final isPending =
+            card.pendingImage || aiState.pendingImageCardIds.contains(card.id);
+        return _AnimatedCardItem(
+          key: ValueKey(card.id),
+          index: index,
+          child: _CardListItem(
+            card: card,
+            isPendingImage: isPending,
+            tagColor: card.tag != null
+                ? ref.read(allTagsProvider.notifier).getTagColor(card.tag!)
+                : null,
+            onTap: () => _showEditCardSheet(context, card),
+            onDelete: () async {
+              final confirmed = await _confirmDelete(context);
+              if (!confirmed) return;
+              await ref.read(flashcardRepositoryProvider).deleteCard(card.id);
+              ref.invalidate(cardsByDeckProvider);
+              ref.invalidate(deckProvider);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupedList(
+      List<Flashcard> cards, List<String> tags, AIGenerationState aiState) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    // Group cards by tag
+    final grouped = <String, List<Flashcard>>{};
+    final untagged = <Flashcard>[];
+    for (final card in cards) {
+      if (card.tag != null && card.tag!.isNotEmpty) {
+        grouped.putIfAbsent(card.tag!, () => []).add(card);
+      } else {
+        untagged.add(card);
+      }
+    }
+
+    final sections = <String>[...tags];
+    if (untagged.isNotEmpty) sections.add('Sem tag');
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 96, top: 4),
+      itemCount: sections.length,
+      itemBuilder: (context, sectionIndex) {
+        final section = sections[sectionIndex];
+        final sectionCards =
+            section == 'Sem tag' ? untagged : (grouped[section] ?? []);
+        if (sectionCards.isEmpty) return const SizedBox.shrink();
+
+        return _CollapsibleTagGroup(
+          tag: section,
+          count: sectionCards.length,
+          theme: theme,
+          colorScheme: colorScheme,
+          tagColor: section != 'Sem tag'
+              ? ref.read(allTagsProvider.notifier).getTagColor(section)
+              : null,
+          children: sectionCards.map((card) {
+            final isPending = card.pendingImage ||
+                aiState.pendingImageCardIds.contains(card.id);
+            return Column(
+              children: [
+                _CardListItem(
+                  card: card,
+                  isPendingImage: isPending,
+                  tagColor: card.tag != null
+                      ? ref.read(allTagsProvider.notifier).getTagColor(card.tag!)
+                      : null,
+                  onTap: () => _showEditCardSheet(context, card),
+                  onDelete: () async {
+                    final confirmed = await _confirmDelete(context);
+                    if (!confirmed) return;
+                    await ref
+                        .read(flashcardRepositoryProvider)
+                        .deleteCard(card.id);
+                    ref.invalidate(cardsByDeckProvider);
+                    ref.invalidate(deckProvider);
+                  },
+                ),
+                Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
+              ],
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -473,72 +833,24 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                   ),
                   const SizedBox(height: 18),
 
-                  // Tags section (collapsible)
-                  GestureDetector(
-                    onTap: () =>
+                  // Tags section
+                  TagPicker(
+                    allTags: ref.watch(allTagsProvider),
+                    selectedTags: selectedTags,
+                    expanded: tagsExpanded,
+                    onToggle: () =>
                         setSheetState(() => tagsExpanded = !tagsExpanded),
-                    child: Row(
-                      children: [
-                        Text('Tags',
-                            style: Theme.of(ctx).textTheme.labelLarge),
-                        const Spacer(),
-                        if (!tagsExpanded && selectedTags.isEmpty)
-                          Text('Nenhuma',
-                              style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                              )),
-                        Icon(tagsExpanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded),
-                      ],
-                    ),
-                  ),
-                  if (!tagsExpanded && selectedTags.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: selectedTags.map((tag) => Chip(
-                          label: Text(tag, style: const TextStyle(fontSize: 12)),
-                          deleteIcon: const Icon(Icons.close_rounded, size: 14),
-                          onDeleted: () => setSheetState(() => selectedTags.remove(tag)),
-                          visualDensity: VisualDensity.compact,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        )).toList(),
-                      ),
-                    ),
-                  AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 300),
-                    crossFadeState: tagsExpanded
-                        ? CrossFadeState.showFirst
-                        : CrossFadeState.showSecond,
-                    firstChild: Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: AppColors.predefinedTags.map((tag) {
-                          final isSelected = selectedTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: isSelected,
-                            onSelected: (v) => setSheetState(() {
-                              if (v) {
-                                selectedTags.add(tag);
-                              } else {
-                                selectedTags.remove(tag);
-                              }
-                            }),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20)),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    secondChild: const SizedBox.shrink(),
+                    onTagChanged: (tag, v) => setSheetState(() {
+                      if (v) {
+                        selectedTags.add(tag);
+                      } else {
+                        selectedTags.remove(tag);
+                      }
+                    }),
+                    onCustomTagAdded: (tag, colorValue) {
+                      ref.read(allTagsProvider.notifier).addTag(tag, colorValue: colorValue);
+                      setSheetState(() => selectedTags.add(tag));
+                    },
                   ),
 
                   const SizedBox(height: 24),
@@ -623,6 +935,7 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
     final backCtrl = TextEditingController(text: card.back);
     String? frontImagePath = card.frontImagePath;
     String? backImagePath = card.backImagePath;
+    String? selectedTag = card.tag;
 
     showModalBottomSheet(
       context: context,
@@ -777,37 +1090,353 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
                   const SizedBox(height: 14),
                   buildImageSection('Imagem do verso', backImagePath,
                       isFront: false),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: () async {
-                        final front = frontCtrl.text.trim();
-                        final back = backCtrl.text.trim();
-                        if (front.isEmpty || back.isEmpty) return;
+                  const SizedBox(height: 14),
 
-                        final updated = card.copyWith(
-                          front: front,
-                          back: back,
-                          frontImagePath: frontImagePath,
-                          clearFrontImage: frontImagePath == null &&
-                              card.frontImagePath != null,
-                          backImagePath: backImagePath,
-                          clearBackImage: backImagePath == null &&
-                              card.backImagePath != null,
-                        );
-                        await ref
-                            .read(flashcardRepositoryProvider)
-                            .updateCard(updated);
-                        ref.invalidate(cardsByDeckProvider);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                      },
-                      child: const Text('Salvar'),
-                    ),
+                  // Tag selector
+                  Text('Tag', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilterChip(
+                        label: const Text('Nenhuma'),
+                        selected: selectedTag == null,
+                        onSelected: (_) =>
+                            setSheetState(() => selectedTag = null),
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                        selectedColor: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                        labelStyle: TextStyle(
+                          color: selectedTag == null
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                          fontWeight: selectedTag == null
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                        showCheckmark: false,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      ),
+                      ...ref.watch(allTagsProvider).map((tag) {
+                            final tagColorVal = ref
+                                .read(allTagsProvider.notifier)
+                                .getTagColor(tag);
+                            final isSelected = selectedTag == tag;
+                            final isDark = theme.brightness == Brightness.dark;
+                            final chipColor = tagColorVal != null
+                                ? Color(tagColorVal)
+                                : colorScheme.primary;
+                            final bgColor = chipColor.withValues(
+                                alpha: isSelected
+                                    ? (isDark ? 0.6 : 1.0)
+                                    : (isDark ? 0.2 : 0.3));
+                            final fgColor = isDark
+                                ? (isSelected ? Colors.white : colorScheme.onSurface)
+                                : (isSelected
+                                    ? Colors.black87
+                                    : colorScheme.onSurface.withValues(alpha: 0.8));
+
+                            return GestureDetector(
+                              onLongPress: () async {
+                                final notifier = ref.read(allTagsProvider.notifier);
+                                final count = await notifier.countCardsWithTag(tag);
+                                if (!ctx.mounted) return;
+                                final confirmed = await showDeleteTagDialog(
+                                  ctx,
+                                  tagName: tag,
+                                  cardsWithTag: count,
+                                );
+                                if (confirmed) {
+                                  await notifier.deleteTag(tag, clearFromCards: true);
+                                  if (ctx.mounted) {
+                                    setSheetState(() {
+                                      if (selectedTag == tag) selectedTag = null;
+                                    });
+                                    ref.invalidate(cardsByDeckProvider);
+                                  }
+                                }
+                              },
+                              child: FilterChip(
+                                label: Text(tag),
+                                selected: isSelected,
+                                onSelected: (v) => setSheetState(
+                                    () => selectedTag = v ? tag : null),
+                                backgroundColor: bgColor,
+                                selectedColor: bgColor,
+                                labelStyle: TextStyle(
+                                  color: fgColor,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                                checkmarkColor: fgColor,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? colorScheme.primary.withValues(alpha: 0.3)
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                                showCheckmark: isSelected,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              ),
+                            );
+                          }),
+                      ActionChip(
+                        avatar: Icon(Icons.add_rounded,
+                            size: 16,
+                            color: colorScheme.primary),
+                        label: const Text('Outro'),
+                        onPressed: () {
+                          _showCreateTagModalInEdit(ctx, setSheetState,
+                              (tag) {
+                            setSheetState(() => selectedTag = tag);
+                          });
+                        },
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                        labelStyle: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child: const Text('Fechar'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: () async {
+                              final front = frontCtrl.text.trim();
+                              final back = backCtrl.text.trim();
+                              if (front.isEmpty || back.isEmpty) return;
+
+                              final updated = card.copyWith(
+                                front: front,
+                                back: back,
+                                frontImagePath: frontImagePath,
+                                clearFrontImage: frontImagePath == null &&
+                                    card.frontImagePath != null,
+                                backImagePath: backImagePath,
+                                clearBackImage: backImagePath == null &&
+                                    card.backImagePath != null,
+                                tag: selectedTag,
+                                clearTag: selectedTag == null && card.tag != null,
+                              );
+                              await ref
+                                  .read(flashcardRepositoryProvider)
+                                  .updateCard(updated);
+                              ref.invalidate(cardsByDeckProvider);
+                              ref.invalidate(deckProvider);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            },
+                            style: FilledButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child: const Text('Salvar'),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCreateTagModalInEdit(
+    BuildContext parentCtx,
+    StateSetter parentSetState,
+    void Function(String tag) onCreated,
+  ) {
+    final controller = TextEditingController();
+    int? selectedColorValue;
+
+    showModalBottomSheet(
+      context: parentCtx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final theme = Theme.of(sheetCtx);
+          final colorScheme = theme.colorScheme;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text('Nova tag',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    )),
+                const SizedBox(height: 4),
+                Text(
+                  'Crie uma tag personalizada para organizar seus cards',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Nome da tag',
+                    hintText: 'Ex: Anatomia, React, ENEM...',
+                    prefixIcon: const Icon(Icons.label_rounded),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 20),
+                Text('Cor da tag', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    GestureDetector(
+                      onTap: () =>
+                          setSheetState(() => selectedColorValue = null),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colorScheme.surfaceContainerHighest,
+                          border: Border.all(
+                            color: selectedColorValue == null
+                                ? colorScheme.primary
+                                : colorScheme.outline
+                                    .withValues(alpha: 0.2),
+                            width: selectedColorValue == null ? 3 : 1.5,
+                          ),
+                        ),
+                        child: Icon(Icons.auto_awesome_rounded,
+                            size: 16,
+                            color: colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                    for (final colorVal in AppColors.tagColorValues)
+                      GestureDetector(
+                        onTap: () => setSheetState(
+                            () => selectedColorValue = colorVal),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(colorVal),
+                            border: Border.all(
+                              color: selectedColorValue == colorVal
+                                  ? colorScheme.primary
+                                  : colorScheme.outline
+                                      .withValues(alpha: 0.2),
+                              width:
+                                  selectedColorValue == colorVal ? 3 : 1.5,
+                            ),
+                            boxShadow: selectedColorValue == colorVal
+                                ? [
+                                    BoxShadow(
+                                      color: Color(colorVal)
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: selectedColorValue == colorVal
+                              ? const Icon(Icons.check_rounded,
+                                  size: 18, color: Colors.white)
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final text = controller.text.trim();
+                      if (text.isNotEmpty) {
+                        await ref
+                            .read(allTagsProvider.notifier)
+                            .addTag(text, colorValue: selectedColorValue);
+                        onCreated(text);
+                        if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                      }
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Criar tag'),
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -848,6 +1477,31 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
     final bytes = await picked.readAsBytes();
     final path = await ImageHelper.saveImage(bytes);
     setSheetState(() => onPicked(path));
+  }
+
+  Future<void> _autoTagCards(
+    List<Flashcard> untaggedCards,
+    List<String> availableTags,
+    String deckId,
+  ) async {
+    final tagged = await ref.read(aiGenerationProvider.notifier).autoTagCards(
+          deckId: deckId,
+          untaggedCards: untaggedCards,
+          availableTags: availableTags,
+        );
+    if (mounted) {
+      final error = ref.read(aiGenerationProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error ??
+              (tagged > 0
+                  ? '$tagged card${tagged > 1 ? 's' : ''} ${tagged > 1 ? 'receberam' : 'recebeu'} tags'
+                  : 'Nenhum card foi taggeado')),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
@@ -985,20 +1639,26 @@ class _CardListItem extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onTap;
   final bool isPendingImage;
+  final int? tagColor;
 
   const _CardListItem({
     required this.card,
     required this.onDelete,
     this.onTap,
     this.isPendingImage = false,
+    this.tagColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final hasImage = card.frontImagePath != null || card.backImagePath != null;
     final imagePath = card.frontImagePath ?? card.backImagePath;
+    final resolvedTagColor = tagColor != null
+        ? (isDark ? Color(tagColor!) : _ensureLightContrast(Color(tagColor!)))
+        : null;
 
     Widget? leadingWidget;
     if (isPendingImage) {
@@ -1052,11 +1712,38 @@ class _CardListItem extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
-      subtitle: Text(
-        card.back,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            card.back,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (card.tag != null && card.tag!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: resolvedTagColor != null
+                      ? resolvedTagColor.withValues(alpha: 0.18)
+                      : colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  card.tag!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 10,
+                    color: resolvedTagColor ??
+                        colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1068,7 +1755,7 @@ class _CardListItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              '${card.interval}d',
+              _formatInterval(card.interval),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1091,4 +1778,251 @@ class _CardListItem extends StatelessWidget {
       ),
     );
   }
+
+  static String _formatInterval(int intervalDays) {
+    if (intervalDays <= 0) return 'novo';
+    if (intervalDays == 1) return '1 dia';
+    if (intervalDays < 7) return '$intervalDays dias';
+    if (intervalDays < 14) return '1 sem';
+    if (intervalDays < 30) return '${intervalDays ~/ 7} sem';
+    if (intervalDays < 60) return '1 mes';
+    if (intervalDays < 365) return '${intervalDays ~/ 30} meses';
+    if (intervalDays < 730) return '1 ano';
+    return '${intervalDays ~/ 365} anos';
+  }
+}
+
+class _CollapsibleTagGroup extends StatefulWidget {
+  final String tag;
+  final int count;
+  final ThemeData theme;
+  final ColorScheme colorScheme;
+  final List<Widget> children;
+  final int? tagColor;
+
+  const _CollapsibleTagGroup({
+    required this.tag,
+    required this.count,
+    required this.theme,
+    required this.colorScheme,
+    required this.children,
+    this.tagColor,
+  });
+
+  @override
+  State<_CollapsibleTagGroup> createState() => _CollapsibleTagGroupState();
+}
+
+class _CollapsibleTagGroupState extends State<_CollapsibleTagGroup>
+    with SingleTickerProviderStateMixin {
+  bool _expanded = true;
+  late final AnimationController _animController;
+  late final CurvedAnimation _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+      value: 1.0,
+    );
+    _animation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeInOut,
+      reverseCurve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (_expanded) {
+      _animController.reverse();
+    } else {
+      _animController.forward();
+    }
+    setState(() => _expanded = !_expanded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rawAccent = widget.tagColor != null
+        ? Color(widget.tagColor!)
+        : widget.colorScheme.primary;
+    final accentColor = isDark ? rawAccent : _ensureLightContrast(rawAccent);
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 6, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: _toggle,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    widget.tag,
+                    style: widget.theme.textTheme.labelLarge?.copyWith(
+                      color: accentColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${widget.count}',
+                      style: widget.theme.textTheme.labelSmall?.copyWith(
+                        color: accentColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  RotationTransition(
+                    turns: Tween<double>(begin: 0.0, end: -0.25)
+                        .animate(_animation),
+                    child: Icon(
+                      Icons.expand_less_rounded,
+                      size: 18,
+                      color: accentColor.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Border starts here — below the header
+          Container(
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: accentColor.withValues(alpha: 0.45),
+                  width: 2.5,
+                ),
+              ),
+            ),
+            margin: const EdgeInsets.only(left: 8),
+            child: ClipRect(
+              child: SizeTransition(
+                sizeFactor: _animation,
+                child: Column(children: widget.children),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shimmer skeleton card shown while AI is generating
+class _SkeletonCard extends StatefulWidget {
+  final ColorScheme colorScheme;
+
+  const _SkeletonCard({required this.colorScheme});
+
+  @override
+  State<_SkeletonCard> createState() => _SkeletonCardState();
+}
+
+class _SkeletonCardState extends State<_SkeletonCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmer;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _shimmer,
+      builder: (context, child) {
+        final opacity = 0.15 + 0.15 * (0.5 + 0.5 * (_shimmer.value * 2 - 1).abs());
+        return ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: widget.colorScheme.primaryContainer
+                  .withValues(alpha: opacity),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: widget.colorScheme.primary.withValues(alpha: 0.4),
+                ),
+              ),
+            ),
+          ),
+          title: Container(
+            height: 14,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: widget.colorScheme.onSurface.withValues(alpha: opacity),
+              borderRadius: BorderRadius.circular(7),
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Container(
+              height: 10,
+              width: 160,
+              decoration: BoxDecoration(
+                color: widget.colorScheme.onSurface
+                    .withValues(alpha: opacity * 0.6),
+                borderRadius: BorderRadius.circular(5),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Ensures a color has enough contrast on white backgrounds.
+/// Darkens colors whose luminance is too high (pastel yellows, light blues, etc.).
+Color _ensureLightContrast(Color color) {
+  final hsl = HSLColor.fromColor(color);
+  if (hsl.lightness > 0.58) {
+    return hsl.withLightness(0.42).withSaturation((hsl.saturation * 1.15).clamp(0.0, 1.0)).toColor();
+  }
+  return color;
 }

@@ -58,6 +58,9 @@ class Flashcard {
   // Image generation pending flag
   final bool pendingImage;
 
+  // Tag for categorization/filtering
+  final String? tag;
+
   const Flashcard({
     required this.id,
     required this.deckId,
@@ -75,6 +78,7 @@ class Flashcard {
     this.lapses = 0,
     this.remainingSteps = 0,
     this.pendingImage = false,
+    this.tag,
   });
 
   Flashcard copyWith({
@@ -93,6 +97,8 @@ class Flashcard {
     int? lapses,
     int? remainingSteps,
     bool? pendingImage,
+    String? tag,
+    bool clearTag = false,
   }) {
     return Flashcard(
       id: id,
@@ -113,6 +119,7 @@ class Flashcard {
       lapses: lapses ?? this.lapses,
       remainingSteps: remainingSteps ?? this.remainingSteps,
       pendingImage: pendingImage ?? this.pendingImage,
+      tag: clearTag ? null : (tag ?? this.tag),
     );
   }
 }

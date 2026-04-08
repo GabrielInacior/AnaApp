@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../providers/deck_provider.dart';
+import '../../providers/repository_providers.dart';
 import '../../widgets/deck_card_widget.dart';
 import '../../widgets/empty_state_widget.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/tag_picker.dart';
 import 'deck_detail_screen.dart';
 
 class DecksScreen extends ConsumerStatefulWidget {
@@ -19,6 +21,7 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
   bool _showFavoritesOnly = false;
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  String? _selectedTag;
 
   @override
   void dispose() {
@@ -119,15 +122,29 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
             filtered = filtered.where((d) {
               return d.name.toLowerCase().contains(query) ||
                   (d.description?.toLowerCase().contains(query) ??
-                      false);
+                      false) ||
+                  d.tags.any((t) => t.toLowerCase().contains(query));
             }).toList();
           }
+
+          if (_selectedTag != null) {
+            filtered = filtered
+                .where((d) => d.tags.contains(_selectedTag))
+                .toList();
+          }
+
+          // Collect all tags in use across decks for the filter bar
+          final allTags = <String>{};
+          for (final d in decks) {
+            allTags.addAll(d.tags);
+          }
+          final sortedTags = allTags.toList()..sort();
 
           return Column(
             children: [
               // Search field
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 child: TextField(
                   controller: _searchController,
                   onChanged: (value) =>
@@ -156,6 +173,32 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
                   ),
                 ),
               ),
+              // Tag filter chips
+              if (sortedTags.isNotEmpty)
+                SizedBox(
+                  height: 42,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      for (final tag in sortedTags)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(tag, style: const TextStyle(fontSize: 12)),
+                            selected: _selectedTag == tag,
+                            onSelected: (v) =>
+                                setState(() => _selectedTag = v ? tag : null),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 4),
               // Content with animated transitions
               Expanded(
                 child: AnimatedSwitcher(
@@ -169,7 +212,7 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
                     );
                   },
                   child: _buildFilteredContent(
-                    filtered, colorScheme, theme),
+                    filtered, colorScheme, theme, sortedTags),
                 ),
               ),
             ],
@@ -183,6 +226,7 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
     List<dynamic> filtered,
     ColorScheme colorScheme,
     ThemeData theme,
+    List<String> sortedTags,
   ) {
     if (filtered.isEmpty && _searchQuery.isNotEmpty) {
       return EmptyStateWidget(
@@ -191,6 +235,19 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
         title: 'Nenhum resultado',
         subtitle:
             'Nenhum baralho encontrado para "$_searchQuery".',
+      );
+    }
+
+    if (filtered.isEmpty && _selectedTag != null) {
+      return EmptyStateWidget(
+        key: const ValueKey('tag-empty'),
+        icon: Icons.label_off_rounded,
+        title: 'Nenhum baralho',
+        subtitle: 'Nenhum baralho com a tag "$_selectedTag".',
+        action: FilledButton.tonal(
+          onPressed: () => setState(() => _selectedTag = null),
+          child: const Text('Limpar filtro'),
+        ),
       );
     }
 
@@ -210,7 +267,7 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
     }
 
     return ListView.builder(
-      key: ValueKey('list-${filtered.length}-$_showFavoritesOnly-$_searchQuery'),
+      key: ValueKey('list-${filtered.length}-$_showFavoritesOnly-$_searchQuery-$_selectedTag'),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
       itemCount: filtered.length,
       itemBuilder: (context, i) {
@@ -312,72 +369,39 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
                   const SizedBox(height: 18),
 
                   // Tags section (collapsible)
-                  GestureDetector(
-                    onTap: () =>
+                  // Tags section
+                  TagPicker(
+                    allTags: ref.watch(allTagsProvider),
+                    selectedTags: selectedTags,
+                    expanded: tagsExpanded,
+                    tagColors: ref.read(allTagsProvider.notifier).tagColors,
+                    onToggle: () =>
                         setSheetState(() => tagsExpanded = !tagsExpanded),
-                    child: Row(
-                      children: [
-                        Text('Tags',
-                            style: Theme.of(ctx).textTheme.labelLarge),
-                        const Spacer(),
-                        if (!tagsExpanded && selectedTags.isEmpty)
-                          Text('Nenhuma',
-                              style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                              )),
-                        Icon(tagsExpanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded),
-                      ],
-                    ),
-                  ),
-                  // Show selected tags when collapsed
-                  if (!tagsExpanded && selectedTags.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: selectedTags.map((tag) => Chip(
-                          label: Text(tag, style: const TextStyle(fontSize: 12)),
-                          deleteIcon: const Icon(Icons.close_rounded, size: 14),
-                          onDeleted: () => setSheetState(() => selectedTags.remove(tag)),
-                          visualDensity: VisualDensity.compact,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        )).toList(),
-                      ),
-                    ),
-                  AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 300),
-                    crossFadeState: tagsExpanded
-                        ? CrossFadeState.showFirst
-                        : CrossFadeState.showSecond,
-                    firstChild: Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: AppColors.predefinedTags.map((tag) {
-                          final isSelected = selectedTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: isSelected,
-                            onSelected: (v) => setSheetState(() {
-                              if (v) {
-                                selectedTags.add(tag);
-                              } else {
-                                selectedTags.remove(tag);
-                              }
-                            }),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20)),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    secondChild: const SizedBox.shrink(),
+                    onTagChanged: (tag, v) => setSheetState(() {
+                      if (v) {
+                        selectedTags.add(tag);
+                      } else {
+                        selectedTags.remove(tag);
+                      }
+                    }),
+                    onCustomTagAdded: (tag, colorValue) async {
+                      await ref.read(allTagsProvider.notifier).addTag(tag, colorValue: colorValue);
+                      setSheetState(() => selectedTags.add(tag));
+                    },
+                    onTagLongPress: (tag) async {
+                      final notifier = ref.read(allTagsProvider.notifier);
+                      final count = await notifier.countCardsWithTag(tag);
+                      if (!ctx.mounted) return;
+                      final confirmed = await showDeleteTagDialog(
+                        ctx,
+                        tagName: tag,
+                        cardsWithTag: count,
+                      );
+                      if (confirmed) {
+                        await notifier.deleteTag(tag, clearFromCards: true);
+                        setSheetState(() => selectedTags.remove(tag));
+                      }
+                    },
                   ),
 
                   const SizedBox(height: 24),
@@ -481,71 +505,39 @@ class _DecksScreenState extends ConsumerState<DecksScreen> {
                   const SizedBox(height: 18),
 
                   // Tags section (collapsible)
-                  GestureDetector(
-                    onTap: () =>
+                  // Tags section
+                  TagPicker(
+                    allTags: ref.watch(allTagsProvider),
+                    selectedTags: selectedTags,
+                    expanded: tagsExpanded,
+                    tagColors: ref.read(allTagsProvider.notifier).tagColors,
+                    onToggle: () =>
                         setSheetState(() => tagsExpanded = !tagsExpanded),
-                    child: Row(
-                      children: [
-                        Text('Tags',
-                            style: Theme.of(ctx).textTheme.labelLarge),
-                        const Spacer(),
-                        if (!tagsExpanded && selectedTags.isEmpty)
-                          Text('Nenhuma',
-                              style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                              )),
-                        Icon(tagsExpanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded),
-                      ],
-                    ),
-                  ),
-                  if (!tagsExpanded && selectedTags.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: selectedTags.map((tag) => Chip(
-                          label: Text(tag, style: const TextStyle(fontSize: 12)),
-                          deleteIcon: const Icon(Icons.close_rounded, size: 14),
-                          onDeleted: () => setSheetState(() => selectedTags.remove(tag)),
-                          visualDensity: VisualDensity.compact,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        )).toList(),
-                      ),
-                    ),
-                  AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 300),
-                    crossFadeState: tagsExpanded
-                        ? CrossFadeState.showFirst
-                        : CrossFadeState.showSecond,
-                    firstChild: Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: AppColors.predefinedTags.map((tag) {
-                          final isSelected = selectedTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: isSelected,
-                            onSelected: (v) => setSheetState(() {
-                              if (v) {
-                                selectedTags.add(tag);
-                              } else {
-                                selectedTags.remove(tag);
-                              }
-                            }),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20)),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    secondChild: const SizedBox.shrink(),
+                    onTagChanged: (tag, v) => setSheetState(() {
+                      if (v) {
+                        selectedTags.add(tag);
+                      } else {
+                        selectedTags.remove(tag);
+                      }
+                    }),
+                    onCustomTagAdded: (tag, colorValue) async {
+                      await ref.read(allTagsProvider.notifier).addTag(tag, colorValue: colorValue);
+                      setSheetState(() => selectedTags.add(tag));
+                    },
+                    onTagLongPress: (tag) async {
+                      final notifier = ref.read(allTagsProvider.notifier);
+                      final count = await notifier.countCardsWithTag(tag);
+                      if (!ctx.mounted) return;
+                      final confirmed = await showDeleteTagDialog(
+                        ctx,
+                        tagName: tag,
+                        cardsWithTag: count,
+                      );
+                      if (confirmed) {
+                        await notifier.deleteTag(tag, clearFromCards: true);
+                        setSheetState(() => selectedTags.remove(tag));
+                      }
+                    },
                   ),
 
                   const SizedBox(height: 24),

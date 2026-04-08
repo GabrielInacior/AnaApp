@@ -60,17 +60,57 @@ class AppColors {
     return Color(colorValue);
   }
 
-  /// Predefined tags for decks
+  /// Predefined subject/topic tags for cards (same as OpenAI topics)
   static const List<String> predefinedTags = [
-    'Idiomas',
-    'Ciencias',
-    'Exatas',
-    'Concursos',
-    'Medicina',
-    'Direito',
-    'Programacao',
-    'Historia',
+    'Inglês',
+    'Espanhol',
+    'Francês',
+    'Matemática',
     'Geografia',
-    'Outros',
+    'Cálculo',
+    'Física',
+    'Biologia',
+    'História',
+    'Química',
+    'Programação',
+    'Concursos',
+    'Direito',
+    'Filosofia',
+    'Medicina',
+  ];
+
+  /// Fixed color for each predefined tag (index-matched with predefinedTags)
+  static const Map<String, int> predefinedTagColors = {
+    'Inglês':      0xFF4FC3F7, // Light Blue
+    'Espanhol':    0xFFFF8A65, // Orange
+    'Francês':     0xFF7986CB, // Indigo
+    'Matemática':  0xFFFFD54F, // Yellow
+    'Geografia':   0xFF81C784, // Green
+    'Cálculo':     0xFFBA68C8, // Purple
+    'Física':      0xFF4DB6AC, // Teal
+    'Biologia':    0xFFAED581, // Light Green
+    'História':    0xFFA1887F, // Brown
+    'Química':     0xFFE57373, // Red
+    'Programação': 0xFF90A4AE, // Blue Grey
+    'Concursos':   0xFFF06292, // Pink
+    'Direito':     0xFFFFD54F, // Yellow
+    'Filosofia':   0xFF7986CB, // Indigo
+    'Medicina':    0xFFE57373, // Red
+  };
+
+  /// Preset colors available for custom tags (saturated, visible)
+  static const List<int> tagColorValues = [
+    0xFFE57373, // Red
+    0xFFFF8A65, // Orange
+    0xFFFFD54F, // Yellow
+    0xFF81C784, // Green
+    0xFF4FC3F7, // Light Blue
+    0xFF7986CB, // Indigo
+    0xFFBA68C8, // Purple
+    0xFFF06292, // Pink
+    0xFF4DB6AC, // Teal
+    0xFFA1887F, // Brown
+    0xFF90A4AE, // Blue Grey
+    0xFFAED581, // Light Green
   ];
 }

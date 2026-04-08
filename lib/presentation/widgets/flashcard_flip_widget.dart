@@ -10,6 +10,8 @@ class FlashcardFlipWidget extends StatefulWidget {
   final VoidCallback onTap;
   final String? frontImagePath;
   final String? backImagePath;
+  final String? tag;
+  final Color? tagColor;
 
   const FlashcardFlipWidget({
     super.key,
@@ -19,6 +21,8 @@ class FlashcardFlipWidget extends StatefulWidget {
     required this.onTap,
     this.frontImagePath,
     this.backImagePath,
+    this.tag,
+    this.tagColor,
   });
 
   @override
@@ -42,6 +46,13 @@ class _FlashcardFlipWidgetState extends State<FlashcardFlipWidget>
   @override
   void didUpdateWidget(FlashcardFlipWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // If the card content changed (new card), snap to front instantly
+    final contentChanged =
+        widget.front != oldWidget.front || widget.back != oldWidget.back;
+    if (contentChanged && !widget.isFlipped) {
+      _controller.value = 0;
+      return;
+    }
     if (widget.isFlipped && !oldWidget.isFlipped) {
       _controller.forward();
     } else if (!widget.isFlipped && oldWidget.isFlipped) {
@@ -75,6 +86,8 @@ class _FlashcardFlipWidgetState extends State<FlashcardFlipWidget>
                       label: 'RESPOSTA',
                       isBack: true,
                       imagePath: widget.backImagePath,
+                      tag: widget.tag,
+                      tagColor: widget.tagColor,
                     ),
                   )
                 : _CardFace(
@@ -82,6 +95,8 @@ class _FlashcardFlipWidgetState extends State<FlashcardFlipWidget>
                     label: 'PERGUNTA',
                     isBack: false,
                     imagePath: widget.frontImagePath,
+                    tag: widget.tag,
+                    tagColor: widget.tagColor,
                   ),
           );
         },
@@ -95,18 +110,25 @@ class _CardFace extends StatelessWidget {
   final String label;
   final bool isBack;
   final String? imagePath;
+  final String? tag;
+  final Color? tagColor;
 
   const _CardFace({
     required this.text,
     required this.label,
     required this.isBack,
     this.imagePath,
+    this.tag,
+    this.tagColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    // Base accent color: tag color if available, gray for untagged
+    final accent = tagColor ?? const Color(0xFF90A4AE);
 
     final List<Color> gradientColors;
     final Color glowColor;
@@ -118,46 +140,44 @@ class _CardFace extends StatelessWidget {
 
     if (isBack) {
       gradientColors = isDark
-          ? [const Color(0xFF3D2852), const Color(0xFF4A2040)]
-          : [const Color(0xFFE8D5F5), const Color(0xFFF5D5E8)];
-      glowColor = isDark
-          ? const Color(0xFF9C4DCC).withValues(alpha: 0.3)
-          : const Color(0xFFCE93D8).withValues(alpha: 0.35);
-      labelBgColor = isDark
-          ? const Color(0xFFCE93D8).withValues(alpha: 0.2)
-          : const Color(0xFFCE93D8).withValues(alpha: 0.25);
+          ? [
+              _blendDark(accent, 0.20),
+              _blendDark(accent, 0.15),
+            ]
+          : [
+              _blendLight(accent, 0.12),
+              _blendLight(accent, 0.08),
+            ];
+      glowColor = accent.withValues(alpha: isDark ? 0.25 : 0.30);
+      labelBgColor = accent.withValues(alpha: isDark ? 0.20 : 0.22);
       labelTextColor = isDark
-          ? const Color(0xFFE1BEE7)
-          : const Color(0xFF7B1FA2);
+          ? _lighten(accent, 0.7)
+          : _darken(accent, 0.35);
       mainTextColor = isDark
-          ? const Color(0xFFF3E5F6)
-          : const Color(0xFF4A1068);
+          ? _lighten(accent, 0.85)
+          : _darken(accent, 0.55);
       hintColor = Colors.transparent;
-      borderColor = isDark
-          ? const Color(0xFFCE93D8).withValues(alpha: 0.15)
-          : const Color(0xFFCE93D8).withValues(alpha: 0.3);
+      borderColor = accent.withValues(alpha: isDark ? 0.15 : 0.25);
     } else {
       gradientColors = isDark
-          ? [const Color(0xFF3D2040), const Color(0xFF2D2852)]
-          : [const Color(0xFFFCE4EC), const Color(0xFFE8DEF8)];
-      glowColor = isDark
-          ? const Color(0xFFF48FB1).withValues(alpha: 0.25)
-          : const Color(0xFFF48FB1).withValues(alpha: 0.3);
-      labelBgColor = isDark
-          ? const Color(0xFFF48FB1).withValues(alpha: 0.18)
-          : const Color(0xFFF48FB1).withValues(alpha: 0.2);
+          ? [
+              _blendDark(accent, 0.18),
+              _blendDark(accent, 0.12),
+            ]
+          : [
+              _blendLight(accent, 0.15),
+              _blendLight(accent, 0.10),
+            ];
+      glowColor = accent.withValues(alpha: isDark ? 0.20 : 0.25);
+      labelBgColor = accent.withValues(alpha: isDark ? 0.18 : 0.20);
       labelTextColor = isDark
-          ? const Color(0xFFF8BBD0)
-          : const Color(0xFFC2185B);
+          ? _lighten(accent, 0.7)
+          : _darken(accent, 0.35);
       mainTextColor = isDark
-          ? const Color(0xFFFCE4EC)
-          : const Color(0xFF4A1048);
-      hintColor = isDark
-          ? const Color(0xFFF8BBD0).withValues(alpha: 0.4)
-          : const Color(0xFFAD1457).withValues(alpha: 0.35);
-      borderColor = isDark
-          ? const Color(0xFFF48FB1).withValues(alpha: 0.12)
-          : const Color(0xFFF8BBD0).withValues(alpha: 0.6);
+          ? _lighten(accent, 0.85)
+          : _darken(accent, 0.55);
+      hintColor = accent.withValues(alpha: isDark ? 0.35 : 0.30);
+      borderColor = accent.withValues(alpha: isDark ? 0.12 : 0.40);
     }
 
     return Container(
@@ -190,22 +210,54 @@ class _CardFace extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            decoration: BoxDecoration(
-              color: labelBgColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: labelTextColor,
-                letterSpacing: 1.8,
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
+          // Label pill row with tag badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                decoration: BoxDecoration(
+                  color: labelBgColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: labelTextColor,
+                    letterSpacing: 1.8,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Tag badge
+          if (tag != null && tag!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: isDark ? 0.25 : 0.18),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: accent.withValues(alpha: isDark ? 0.3 : 0.25),
+                  width: 0.5,
+                ),
+              ),
+              child: Text(
+                tag!,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: isDark
+                      ? _lighten(accent, 0.65)
+                      : _darken(accent, 0.25),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
               ),
             ),
-          ),
+          ],
 
           // Image (if available)
           if (imagePath != null) ...[
@@ -256,5 +308,25 @@ class _CardFace extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Blend accent into a dark background
+  static Color _blendDark(Color accent, double amount) {
+    return Color.lerp(const Color(0xFF1A1A2E), accent, amount)!;
+  }
+
+  /// Blend accent into a light background
+  static Color _blendLight(Color accent, double amount) {
+    return Color.lerp(Colors.white, accent, amount)!;
+  }
+
+  /// Darken a color by mixing with black
+  static Color _darken(Color color, double amount) {
+    return Color.lerp(color, Colors.black, amount)!;
+  }
+
+  /// Lighten a color by mixing with white
+  static Color _lighten(Color color, double amount) {
+    return Color.lerp(color, Colors.white, amount)!;
   }
 }
