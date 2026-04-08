@@ -1,4 +1,5 @@
 // lib/presentation/screens/decks/deck_detail_screen.dart
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +33,7 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
   late final AnimationController _animController;
   late final Animation<double> _headerOpacity;
   late final Animation<Offset> _headerSlide;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -56,10 +58,15 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen>
       ),
     );
     _animController.forward();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) { if (mounted) setState(() {}); },
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _animController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -1733,93 +1740,130 @@ class _CardListItem extends StatelessWidget {
       );
     }
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      leading: leadingWidget,
+    return InkWell(
       onTap: onTap,
-      title: Text(
-        card.front,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            card.back,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (card.tag != null && card.tag!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: resolvedTagColor != null
-                      ? resolvedTagColor.withValues(alpha: 0.18)
-                      : colorScheme.primaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  card.tag!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontSize: 10,
-                    color: resolvedTagColor ??
-                        colorScheme.onPrimaryContainer,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- Top row: tag + actions ---
+            Row(
+              children: [
+                if (card.tag != null && card.tag!.isNotEmpty)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: resolvedTagColor != null
+                          ? resolvedTagColor.withValues(alpha: 0.18)
+                          : colorScheme.primaryContainer
+                              .withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      card.tag!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontSize: 10,
+                        color: resolvedTagColor ??
+                            colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _formatRelativeTime(card.createdAt),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontSize: 10,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 2),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 15,
+                    icon: Icon(Icons.edit_rounded,
+                        color: colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.6)),
+                    onPressed: onTap,
+                    tooltip: 'Editar card',
+                  ),
+                ),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 16,
+                    icon: Icon(Icons.delete_outline_rounded,
+                        color: colorScheme.error.withValues(alpha: 0.7)),
+                    onPressed: onDelete,
+                    tooltip: 'Excluir card',
+                  ),
+                ),
+              ],
             ),
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
+            const SizedBox(height: 4),
+            // --- Content: image + text ---
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (leadingWidget != null) ...[
+                  leadingWidget,
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.front,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        card.back,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            child: Text(
-              _formatInterval(card.interval),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(Icons.edit_rounded,
-                size: 18, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
-            onPressed: onTap,
-            tooltip: 'Editar card',
-          ),
-          IconButton(
-            icon: Icon(Icons.delete_outline_rounded,
-                size: 20, color: colorScheme.error.withValues(alpha: 0.7)),
-            onPressed: onDelete,
-            tooltip: 'Excluir card',
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  static String _formatInterval(int intervalDays) {
-    if (intervalDays <= 0) return 'novo';
-    if (intervalDays == 1) return '1 dia';
-    if (intervalDays < 7) return '$intervalDays dias';
-    if (intervalDays < 14) return '1 sem';
-    if (intervalDays < 30) return '${intervalDays ~/ 7} sem';
-    if (intervalDays < 60) return '1 mes';
-    if (intervalDays < 365) return '${intervalDays ~/ 30} meses';
-    if (intervalDays < 730) return '1 ano';
-    return '${intervalDays ~/ 365} anos';
+  static String _formatRelativeTime(DateTime createdAt) {
+    final diff = DateTime.now().difference(createdAt);
+    final minutes = diff.inMinutes;
+    final hours = diff.inHours;
+    final days = diff.inDays;
+
+    if (minutes < 1) return 'agora';
+    if (hours < 1) return '$minutes min';
+    if (hours < 23) return '$hours h';
+    if (days < 30) return '$days d';
+    if (days < 365) return '${days ~/ 30} ${days ~/ 30 == 1 ? 'mês' : 'meses'}';
+    return '${days ~/ 365} ${days ~/ 365 == 1 ? 'ano' : 'anos'}';
   }
 }
 

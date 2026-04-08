@@ -816,7 +816,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         ),
         const SizedBox(height: 10),
         Text(
-          'AnaApp',
+          'AnkiAna',
           style: theme.textTheme.titleMedium
               ?.copyWith(fontWeight: FontWeight.w700),
         ),
