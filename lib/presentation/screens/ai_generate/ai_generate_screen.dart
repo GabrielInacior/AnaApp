@@ -1141,7 +1141,7 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
 
           // Source choice chips
           Wrap(
-            spacing: 8,
+            spacing: 3,
             runSpacing: 8,
             children: [
               _sourceChoiceChip(
@@ -1190,11 +1190,11 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon,
-              size: 16,
+              size: 12,
               color: isSelected
                   ? colorScheme.onPrimaryContainer
                   : colorScheme.onSurfaceVariant),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Text(label,
           style: const TextStyle(fontSize: 12), // diminui aqui
         ),
@@ -1605,22 +1605,21 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
   // ─── Pick image for manual card ────────────────────────────
   Future<void> _pickManualImage(bool isFront) async {
     try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
+      final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         maxWidth: 512,
         maxHeight: 512,
         imageQuality: 85,
       );
-      if (picked == null) return;
+      if (picked == null || !mounted) return;
+
+      // Read bytes and save to permanent app storage
+      final bytes = await picked.readAsBytes();
       if (!mounted) return;
 
-      // Copy file directly — more reliable on Android than readAsBytes
-      final srcFile = File(picked.path);
-      if (!await srcFile.exists()) {
-        final bytes = await picked.readAsBytes();
-        if (bytes.isEmpty || !mounted) return;
-        final savedPath = await ImageHelper.saveImage(bytes);
+      if (bytes.isNotEmpty) {
+        final savedPath = await ImageHelper.saveImage(bytes, extension: 'jpg');
+        if (!mounted) return;
         setState(() {
           if (isFront) {
             _manualFrontImagePath = savedPath;
@@ -1628,26 +1627,16 @@ class _AIGenerateScreenState extends ConsumerState<AIGenerateScreen> {
             _manualBackImagePath = savedPath;
           }
         });
-        return;
+      } else {
+        // Fallback: use the temp path directly
+        setState(() {
+          if (isFront) {
+            _manualFrontImagePath = picked.path;
+          } else {
+            _manualBackImagePath = picked.path;
+          }
+        });
       }
-
-      final dir = await getApplicationDocumentsDirectory();
-      final imagesDir = Directory('${dir.path}/card_images');
-      if (!await imagesDir.exists()) {
-        await imagesDir.create(recursive: true);
-      }
-      final ext = picked.name.split('.').lastOrNull ?? 'jpg';
-      final destPath = '${imagesDir.path}/${const Uuid().v4()}.$ext';
-      await srcFile.copy(destPath);
-
-      if (!mounted) return;
-      setState(() {
-        if (isFront) {
-          _manualFrontImagePath = destPath;
-        } else {
-          _manualBackImagePath = destPath;
-        }
-      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
